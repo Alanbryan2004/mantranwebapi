@@ -9,11 +9,11 @@ export default function Sidebar() {
       ? [
           { to: "/dashboard", label: "Dashboard" },
           { to: "/pendentes", label: "Tarefas Pendentes" },
-          { to: "/minhas", label: "Minhas Tarefas" },
+          { to: "/minhas-tarefas", label: "Minhas Tarefas" },
           { to: "/finalizadas", label: "Finalizadas" },
         ]
       : [
-          { to: "/minhas", label: "Minhas Tarefas" },
+          { to: "/minhas-tarefas", label: "Minhas Tarefas" },
           { to: "/pendentes", label: "Pendentes" },
           { to: "/finalizadas", label: "Finalizadas" },
         ];
@@ -21,6 +21,7 @@ export default function Sidebar() {
   return (
     <aside style={styles.sidebar}>
       <div style={styles.sectionTitle}>Menu</div>
+
       <nav style={styles.nav}>
         {links.map((l) => (
           <NavLink
@@ -46,8 +47,16 @@ const styles = {
     borderRight: "1px solid #eee",
     padding: 12,
   },
-  sectionTitle: { fontSize: 12, color: "#6b7280", marginBottom: 8 },
-  nav: { display: "flex", flexDirection: "column", gap: 6 },
+  sectionTitle: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginBottom: 8,
+  },
+  nav: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+  },
   link: {
     padding: "10px 12px",
     borderRadius: 10,

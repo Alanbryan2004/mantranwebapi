@@ -5,20 +5,28 @@ import { useAuth } from "../contexts/AuthContext";
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const isAdmin = user?.perfil === "Administrador";
+
   const [rows, setRows] = useState([]);
   const [erro, setErro] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let ok = true;
+
     (async () => {
       try {
         setErro("");
         setLoading(true);
 
-        // Admin enxerga tudo; técnico não deveria usar essa tela, mas se entrar, mostramos o básico
+        let filtro = "";
+        if (!isAdmin) {
+          // Técnico vê apenas as tarefas dele
+          filtro = `&tecnico_id=eq.${user.id}`;
+        }
+
         const data = await apiGet(
-          `/rest/v1/controle_api?select=id,tecnico_id,tecnico_nome,status_api,status_teste,status_documentacao,modulo`
+          `/rest/v1/controle_api?select=id,tecnico_id,tecnico_nome,status_api,status_teste,status_documentacao,modulo${filtro}`
         );
 
         if (ok) setRows(data || []);
@@ -28,45 +36,51 @@ export default function Dashboard() {
         if (ok) setLoading(false);
       }
     })();
+
     return () => {
       ok = false;
     };
-  }, []);
+  }, [isAdmin, user?.id]);
 
   const resumo = useMemo(() => {
     const total = rows.length;
 
-    const pendentes = rows.filter((r) => !r.tecnico_id).length;
-    const trabalhando = rows.filter((r) => r.tecnico_id && r.status_api === "Trabalhando").length;
+    const pendentes = rows.filter((r) => r.status_api === "Pendente").length;
+    const trabalhando = rows.filter((r) => r.status_api === "Trabalhando").length;
 
     const ok = rows.filter(
-      (r) => r.status_api === "OK" && r.status_teste === "OK" && r.status_documentacao === "OK"
+      (r) =>
+        r.status_api === "OK" &&
+        r.status_teste === "OK" &&
+        r.status_documentacao === "OK"
     ).length;
 
     const porTecnico = {};
-    for (const r of rows) {
-      const key = r.tecnico_nome || "Sem Técnico";
-      porTecnico[key] ||= { total: 0, pendentes: 0, trabalhando: 0, ok: 0 };
-      porTecnico[key].total += 1;
+    if (isAdmin) {
+      for (const r of rows) {
+        const key = r.tecnico_nome || "Sem Técnico";
+        porTecnico[key] ||= { total: 0, pendentes: 0, trabalhando: 0, ok: 0 };
+        porTecnico[key].total += 1;
 
-      if (!r.tecnico_id) porTecnico[key].pendentes += 1;
-      else if (r.status_api === "Trabalhando") porTecnico[key].trabalhando += 1;
+        if (r.status_api === "Pendente") porTecnico[key].pendentes += 1;
+        else if (r.status_api === "Trabalhando") porTecnico[key].trabalhando += 1;
 
-      if (r.status_api === "OK" && r.status_teste === "OK" && r.status_documentacao === "OK")
-        porTecnico[key].ok += 1;
+        if (
+          r.status_api === "OK" &&
+          r.status_teste === "OK" &&
+          r.status_documentacao === "OK"
+        )
+          porTecnico[key].ok += 1;
+      }
     }
 
     return { total, pendentes, trabalhando, ok, porTecnico };
-  }, [rows]);
+  }, [rows, isAdmin]);
 
   return (
     <AppShell title="Dashboard">
-      {user?.perfil !== "Administrador" ? (
-        <div style={styles.warn}>Apenas Administrador deve usar esta tela.</div>
-      ) : null}
-
-      {loading ? <div>Carregando...</div> : null}
-      {erro ? <div style={styles.err}>{erro}</div> : null}
+      {loading && <div>Carregando...</div>}
+      {erro && <div style={styles.err}>{erro}</div>}
 
       {!loading && !erro && (
         <>
@@ -77,21 +91,25 @@ export default function Dashboard() {
             <Card title="Concluídas (OK)" value={resumo.ok} />
           </div>
 
-          <h3 style={styles.h3}>Por Técnico</h3>
-          <div style={styles.list}>
-            {Object.entries(resumo.porTecnico)
-              .filter(([k]) => k !== "Sem Técnico")
-              .map(([nome, v]) => (
-                <div key={nome} style={styles.row}>
-                  <div style={{ fontWeight: 800 }}>{nome}</div>
-                  <div style={styles.badges}>
-                    <Badge label={`Total: ${v.total}`} />
-                    <Badge label={`Trabalhando: ${v.trabalhando}`} />
-                    <Badge label={`OK: ${v.ok}`} />
-                  </div>
-                </div>
-              ))}
-          </div>
+          {isAdmin && (
+            <>
+              <h3 style={styles.h3}>Por Técnico</h3>
+              <div style={styles.list}>
+                {Object.entries(resumo.porTecnico)
+                  .filter(([k]) => k !== "Sem Técnico")
+                  .map(([nome, v]) => (
+                    <div key={nome} style={styles.row}>
+                      <div style={{ fontWeight: 800 }}>{nome}</div>
+                      <div style={styles.badges}>
+                        <Badge label={`Total: ${v.total}`} />
+                        <Badge label={`Trabalhando: ${v.trabalhando}`} />
+                        <Badge label={`OK: ${v.ok}`} />
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </>
+          )}
         </>
       )}
     </AppShell>
@@ -138,14 +156,6 @@ const styles = {
     background: "#FEF2F2",
     color: "#991B1B",
     border: "1px solid #FECACA",
-    borderRadius: 12,
-    padding: 10,
-  },
-  warn: {
-    marginBottom: 10,
-    background: "#FFFBEB",
-    color: "#92400E",
-    border: "1px solid #FDE68A",
     borderRadius: 12,
     padding: 10,
   },
