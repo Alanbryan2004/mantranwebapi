@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
+// 👉 imagem dentro da pasta pages
+import LogoMantran from "./logo_mantran.png";
+
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -31,8 +34,15 @@ export default function Login() {
   return (
     <div style={styles.wrap}>
       <div style={styles.card}>
+        {/* LOGO */}
+        <div style={styles.logoContainer}>
+          <img src={LogoMantran} alt="Mantran" style={styles.logo} />
+        </div>
+
         <div style={styles.title}>MantranWebAPI</div>
-        <div style={styles.subtitle}>Controle de desenvolvimento (API, Testes, Documentação)</div>
+        <div style={styles.subtitle}>
+          Controle de desenvolvimento (API, Testes, Documentação)
+        </div>
 
         <form onSubmit={onSubmit} style={{ marginTop: 18 }}>
           <label style={styles.label}>Login</label>
@@ -61,7 +71,8 @@ export default function Login() {
         </form>
 
         <div style={styles.hint}>
-          Dica: o login foi gerado como o nome em minúsculo sem espaços (ex: <b>alan</b>).
+          Dica: o login foi gerado como o nome em minúsculo sem espaços (ex:{" "}
+          <b>alan</b>).
         </div>
       </div>
     </div>
@@ -82,10 +93,36 @@ const styles = {
     borderRadius: 16,
     padding: 18,
     boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+    boxSizing: "border-box", // 🔒 garante que nada vaze
   },
-  title: { fontSize: 22, fontWeight: 800, color: "#8B0000" },
-  subtitle: { fontSize: 13, color: "#6b7280", marginTop: 6 },
-  label: { display: "block", fontSize: 12, color: "#374151", marginTop: 8 },
+
+  /* LOGO */
+  logoContainer: {
+    display: "flex",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  logo: {
+    maxWidth: 180,
+    width: "100%",
+    height: "auto",
+  },
+
+  title: { fontSize: 22, fontWeight: 800, color: "#8B0000", textAlign: "center" },
+  subtitle: {
+    fontSize: 13,
+    color: "#6b7280",
+    marginTop: 6,
+    textAlign: "center",
+  },
+
+  label: {
+    display: "block",
+    fontSize: 12,
+    color: "#374151",
+    marginTop: 8,
+  },
+
   input: {
     width: "100%",
     padding: "10px 12px",
@@ -93,7 +130,9 @@ const styles = {
     border: "1px solid #e5e7eb",
     outline: "none",
     marginTop: 6,
+    boxSizing: "border-box", // 🔒 correção definitiva
   },
+
   btn: {
     width: "100%",
     marginTop: 14,
@@ -105,6 +144,7 @@ const styles = {
     fontWeight: 800,
     cursor: "pointer",
   },
+
   error: {
     marginTop: 10,
     background: "#FEF2F2",
@@ -114,5 +154,6 @@ const styles = {
     padding: 10,
     fontSize: 13,
   },
-  hint: { marginTop: 12, fontSize: 12, color: "#6b7280" },
+
+  hint: { marginTop: 12, fontSize: 12, color: "#6b7280", textAlign: "center" },
 };
