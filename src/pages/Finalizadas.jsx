@@ -3,7 +3,7 @@ import AppShell from "../components/AppShell";
 import { apiGet } from "../services/api";
 
 export default function Finalizadas() {
-  const [rows, setRows] = useState([]);
+  const [telas, setTelas] = useState([]);
   const [mediaHoras, setMediaHoras] = useState(0);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
@@ -16,24 +16,52 @@ export default function Finalizadas() {
         setErro("");
         setLoading(true);
 
-        // 1️⃣ Tarefas finalizadas
         const tarefas = await apiGet(
           `/rest/v1/controle_api` +
-            `?select=id,nome_tabela,tela,tecnico_nome` +
-            `&status_api=eq.OK` +
-            `&status_teste=eq.OK` +
-            `&status_documentacao=eq.OK`
+            `?select=id,tela,nome_tabela` +
+            `&status_api=eq.Finalizado` +
+            `&status_teste=eq.Finalizado` +
+            `&status_documentacao=eq.Finalizado`
         );
 
-        // 2️⃣ Média de horas por tela
-        const media = await apiGet(
-          `/rest/v1/vw_media_horas_por_tela?select=media_horas_por_tela&limit=1`
+        const horas = await apiGet(
+          `/rest/v1/apontamento_tempo` +
+            `?select=controle_api_id,inicio,fim` +
+            `&fim=not.is.null`
         );
 
         if (!ativo) return;
 
-        setRows(tarefas || []);
-        setMediaHoras(media?.[0]?.media_horas_por_tela || 0);
+        const mapa = {};
+
+        for (const t of tarefas || []) {
+          if (!mapa[t.tela]) {
+            mapa[t.tela] = {
+              tela: t.tela,
+              tabelas: [],
+              horas: 0,
+            };
+          }
+
+          mapa[t.tela].tabelas.push(t.nome_tabela);
+
+          const horasTabela = (horas || []).filter(
+            (h) => h.controle_api_id === t.id
+          );
+
+          for (const h of horasTabela) {
+            const inicio = new Date(h.inicio);
+            const fim = new Date(h.fim);
+            mapa[t.tela].horas += (fim - inicio) / 36e5;
+          }
+        }
+
+        const lista = Object.values(mapa);
+        const totalHoras = lista.reduce((s, t) => s + t.horas, 0);
+        const media = lista.length ? totalHoras / lista.length : 0;
+
+        setTelas(lista);
+        setMediaHoras(media);
       } catch (e) {
         if (ativo) setErro(e.message || String(e));
       } finally {
@@ -52,30 +80,41 @@ export default function Finalizadas() {
 
       {!loading && !erro && (
         <>
-          {/* 🔢 CARDS */}
+          {/* 🔢 CARDS TOPO */}
           <div style={styles.grid}>
-            <Card title="Total Finalizadas" value={rows.length} />
+            <Card
+              title="Total de Telas Finalizadas"
+              value={telas.length}
+            />
             <Card
               title="Média de Horas por Tela"
               value={`${mediaHoras.toFixed(2)} h`}
             />
           </div>
 
-          {/* 📋 LISTA */}
-          <div style={styles.list}>
-            {rows.map((r) => (
-              <div key={r.id} style={styles.row}>
-                <div>
-                  <strong>{r.nome_tabela}</strong>
-                  <div style={styles.sub}>
-                    Tela: {r.tela} • Técnico: {r.tecnico_nome}
-                  </div>
+          {/* 🔴 FIELDSETS POR TELA */}
+          <div style={styles.wrapper}>
+            {telas.map((t) => (
+              <fieldset key={t.tela} style={styles.fieldset}>
+                <legend style={styles.legend}>{t.tela}</legend>
+
+                <div style={styles.innerCard}>
+                  ⏱️ Horas totais:{" "}
+                  <strong>{t.horas.toFixed(1)} h</strong>
                 </div>
-              </div>
+
+                <ul style={styles.ul}>
+                  {t.tabelas.map((tb, i) => (
+                    <li key={i}>{tb}</li>
+                  ))}
+                </ul>
+              </fieldset>
             ))}
 
-            {rows.length === 0 && (
-              <div style={styles.empty}>Nenhuma tarefa finalizada</div>
+            {telas.length === 0 && (
+              <div style={styles.empty}>
+                Nenhuma tela finalizada
+              </div>
             )}
           </div>
         </>
@@ -97,33 +136,59 @@ const styles = {
   grid: {
     display: "grid",
     gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gap: 12,
-    marginBottom: 16,
+    gap: 16,
+    marginBottom: 24,
   },
+
   card: {
     background: "#fff",
     border: "1px solid #eee",
     borderRadius: 14,
-    padding: 14,
+    padding: 16,
   },
   cardTitle: { fontSize: 12, color: "#6b7280" },
   cardValue: { fontSize: 26, fontWeight: 900 },
-  list: {
-    background: "#fff",
-    border: "1px solid #eee",
+
+  wrapper: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 20,
+  },
+
+  fieldset: {
+    border: "1px solid #e5e7eb",
     borderRadius: 14,
-    padding: 12,
+    padding: "14px 16px 16px",
+    background: "#fff",
   },
-  row: {
-    padding: "10px 8px",
-    borderBottom: "1px solid #f3f4f6",
+
+  legend: {
+    padding: "0 8px",
+    fontWeight: 800,
+    color: "#b91c1c", // vermelho-700
+    fontSize: 14,
   },
-  sub: { fontSize: 12, color: "#6b7280" },
+
+  innerCard: {
+    background: "#fef2f2",
+    border: "1px solid #fecaca",
+    borderRadius: 10,
+    padding: "10px 12px",
+    marginBottom: 10,
+    fontSize: 13,
+  },
+
+  ul: {
+    paddingLeft: 18,
+    fontSize: 13,
+  },
+
   empty: {
     padding: 20,
     textAlign: "center",
     color: "#6b7280",
   },
+
   err: {
     background: "#fee2e2",
     color: "#991b1b",
