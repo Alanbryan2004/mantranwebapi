@@ -7,16 +7,19 @@ export default function Sidebar() {
   const links =
     user?.perfil === "Administrador"
       ? [
-          { to: "/dashboard", label: "Dashboard" },
-          { to: "/pendentes", label: "Tarefas Pendentes" },
-          { to: "/minhas-tarefas", label: "Minhas Tarefas" },
-          { to: "/finalizadas", label: "Finalizadas" },
-        ]
+        { to: "/dashboard", label: "Dashboard" },
+        { to: "/pendentes", label: "Tarefas Pendentes" },
+        { to: "/minhas-tarefas", label: "Minhas Tarefas" },
+        { to: "/finalizadas", label: "Finalizadas" },
+
+        // 👉 NOVO ITEM
+        { to: "/cadastro-telas", label: "Cadastro de Telas" },
+      ]
       : [
-          { to: "/minhas-tarefas", label: "Minhas Tarefas" },
-          { to: "/pendentes", label: "Pendentes" },
-          { to: "/finalizadas", label: "Finalizadas" },
-        ];
+        { to: "/minhas-tarefas", label: "Minhas Tarefas" },
+        { to: "/pendentes", label: "Pendentes" },
+        { to: "/finalizadas", label: "Finalizadas" },
+      ];
 
   return (
     <aside style={styles.sidebar}>
