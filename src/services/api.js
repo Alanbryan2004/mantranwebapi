@@ -29,8 +29,8 @@ async function request(path, options = {}) {
   if (!res.ok) {
     throw new Error(
       (data && (data.message || data.error || data.error_description)) ||
-        text ||
-        `HTTP ${res.status}`
+      text ||
+      `HTTP ${res.status}`
     );
   }
 
@@ -45,6 +45,13 @@ export function apiGet(path) {
   return request(path, { method: "GET" });
 }
 
+export function apiPost(path, body) {
+  return request(path, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export function apiPatch(path, body) {
   return request(path, {
     method: "PATCH",
@@ -55,10 +62,10 @@ export function apiPatch(path, body) {
   });
 }
 
-export function apiPost(path, body) {
+// 👉 ADIÇÃO NECESSÁRIA
+export function apiDelete(path) {
   return request(path, {
-    method: "POST",
-    body: JSON.stringify(body),
+    method: "DELETE",
   });
 }
 

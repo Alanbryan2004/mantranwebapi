@@ -8,6 +8,8 @@ import Pendentes from "./pages/Pendentes";
 import HomeRedirect from "./pages/HomeRedirect";
 import Finalizadas from "./pages/Finalizadas";
 
+// 👉 NOVA TELA
+import CadastroTelas from "./pages/CadastroTelas";
 
 export default function App() {
   return (
@@ -68,8 +70,9 @@ export default function App() {
         }
       />
 
-
-
+      {/* =========================
+         Finalizadas
+      ========================= */}
       <Route
         path="/finalizadas"
         element={
@@ -80,89 +83,13 @@ export default function App() {
       />
 
       {/* =========================
-         Fallback
-      ========================= */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
-}
-import { Routes, Route, Navigate } from "react-router-dom";
-import ProtectedRoute from "./components/ProtectedRoute";
-
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import MinhasTarefas from "./pages/MinhasTarefas";
-import Pendentes from "./pages/Pendentes";
-import HomeRedirect from "./pages/HomeRedirect";
-import Finalizadas from "./pages/Finalizadas";
-
-
-export default function App() {
-  return (
-    <Routes>
-      {/* =========================
-         Login público
-      ========================= */}
-      <Route path="/login" element={<Login />} />
-
-      {/* =========================
-         Rota raiz decide destino
-         (Admin → Dashboard
-          Técnico → Minhas Tarefas)
+         Cadastro de Telas (Admin)
       ========================= */}
       <Route
-        path="/"
+        path="/cadastro-telas"
         element={
           <ProtectedRoute>
-            <HomeRedirect />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* =========================
-         Dashboard (Admin)
-      ========================= */}
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* =========================
-         Minhas Tarefas (Técnico)
-      ========================= */}
-      <Route
-        path="/minhas-tarefas"
-        element={
-          <ProtectedRoute>
-            <MinhasTarefas />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* =========================
-         Pendentes
-         (Admin vê | Técnico assume)
-      ========================= */}
-      <Route
-        path="/pendentes"
-        element={
-          <ProtectedRoute>
-            <Pendentes />
-          </ProtectedRoute>
-        }
-      />
-
-
-
-      <Route
-        path="/finalizadas"
-        element={
-          <ProtectedRoute>
-            <Finalizadas />
+            <CadastroTelas />
           </ProtectedRoute>
         }
       />

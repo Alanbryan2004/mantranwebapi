@@ -1,540 +1,332 @@
-// src/pages/CadastroTelas.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+    XCircle,
+    RotateCcw,
+    PlusCircle,
+    Edit,
+    Trash2,
+} from "lucide-react";
 import AppShell from "../components/AppShell";
-import { useAuth } from "../contexts/AuthContext";
 import { apiGet, apiPost, apiPatch, apiDelete } from "../services/api";
 
-// ---------- helpers ----------
-function camelToSnakeUpper(name = "") {
-    // "ContasPagar" -> "CONTAS_PAGAR"
-    // "CTePage" -> "CTE_PAGE"
-    const cleaned = String(name || "")
-        .replace(/\.(jsx|tsx|js|ts)$/i, "")
-        .trim();
-
-    if (!cleaned) return "";
-
-    // Se já vier em snake, só upper
-    if (cleaned.includes("_")) return cleaned.toUpperCase();
-
-    // Insere underscore antes de maiúsculas (exceto primeira)
-    const snake = cleaned
-        .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-        .replace(/([A-Z])([A-Z][a-z])/g, "$1_$2");
-
-    return snake.toUpperCase();
+/* ================= Helpers visuais ================= */
+function Label({ children }) {
+    return (
+        <label className="text-[12px] text-gray-700 pr-2">
+            {children}
+        </label>
+    );
 }
 
-function containsCI(hay, needle) {
-    return String(hay || "").toLowerCase().includes(String(needle || "").toLowerCase());
+function Txt(props) {
+    return (
+        <input
+            {...props}
+            className="border border-gray-300 rounded px-2 py-[3px] h-[28px]
+      text-[13px] w-full focus:outline-none focus:ring-1 focus:ring-red-300"
+        />
+    );
 }
 
-const MODULOS = ["Operacao", "Financeiro", "WMS", "Seguranca", "Oficina"];
-const TIPOS = ["Cadastro", "Documento"];
+function Sel({ children, ...rest }) {
+    return (
+        <select
+            {...rest}
+            className="border border-gray-300 rounded px-2 py-[3px] h-[28px]
+      text-[13px] w-full focus:outline-none focus:ring-1 focus:ring-red-300"
+        >
+            {children}
+        </select>
+    );
+}
 
+/* ================= Componente ================= */
 export default function CadastroTelas() {
-    const { user } = useAuth();
+    const navigate = useNavigate();
 
-    // ---------- abas ----------
-    const [aba, setAba] = useState("cadastro"); // "cadastro" | "consulta"
+    const [aba, setAba] = useState("cadastro");
+    const [lista, setLista] = useState([]);
+    const [editId, setEditId] = useState(null);
 
-    // ---------- form ----------
-    const [form, setForm] = useState({
-        id: null,
+    const [dados, setDados] = useState({
         nome_tabela: "",
         tipo_tabela: "Cadastro",
         qtd_campos: "",
         modulo: "Operacao",
     });
 
-    const [busy, setBusy] = useState(false);
-    const [erro, setErro] = useState("");
-
-    // ---------- consulta ----------
-    const [lista, setLista] = useState([]);
-    const [loadingLista, setLoadingLista] = useState(true);
-
-    const [q, setQ] = useState("");
-    const [fModulo, setFModulo] = useState("Todos");
-
-    const total = lista.length;
-
-    const filtrada = useMemo(() => {
-        let arr = [...lista];
-
-        if (fModulo !== "Todos") {
-            arr = arr.filter((r) => String(r.modulo || "") === fModulo);
-        }
-
-        if (q.trim()) {
-            arr = arr.filter((r) => {
-                return (
-                    containsCI(r.nome_tabela, q) ||
-                    containsCI(r.tipo_tabela, q) ||
-                    containsCI(r.modulo, q)
-                );
-            });
-        }
-
-        return arr;
-    }, [lista, q, fModulo]);
-
-    // ---------- carregar lista ----------
-    async function carregarLista() {
-        setLoadingLista(true);
-        setErro("");
-        try {
-            // Ajuste o select conforme quiser mostrar na grid
-            const rows = await apiGet(
-                `/rest/v1/controle_api?select=id,nome_tabela,tipo_tabela,modulo,qtd_campos,nivel_api,peso_api,created_at,updated_at&order=nome_tabela.asc`
-            );
-
-            setLista(Array.isArray(rows) ? rows : []);
-        } catch (e) {
-            setErro(e?.message || "Erro ao carregar telas.");
-            setLista([]);
-        } finally {
-            setLoadingLista(false);
-        }
+    /* ================= Load ================= */
+    async function carregar() {
+        const data = await apiGet(
+            "/rest/v1/controle_api?select=id,tela,nome_tabela,tipo_tabela,modulo,qtd_campos,nivel_api&order=nome_tabela.asc"
+        );
+        setLista(data || []);
     }
 
     useEffect(() => {
-        carregarLista();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        carregar();
     }, []);
 
-    // ---------- ações ----------
-    function limparFormulario() {
-        setForm({
-            id: null,
+    /* ================= Ações ================= */
+    const limpar = () => {
+        setDados({
             nome_tabela: "",
             tipo_tabela: "Cadastro",
             qtd_campos: "",
             modulo: "Operacao",
         });
-        setErro("");
-    }
+        setEditId(null);
+    };
 
-    function carregarNoCadastro(row) {
-        setForm({
-            id: row.id,
-            nome_tabela: row.nome_tabela || "",
-            tipo_tabela: row.tipo_tabela || "Cadastro",
-            qtd_campos: row.qtd_campos ?? "",
-            modulo: row.modulo || "Operacao",
+    const incluir = async () => {
+        if (!dados.nome_tabela.trim())
+            return alert("Informe a Tela");
+
+        if (!dados.qtd_campos || Number(dados.qtd_campos) <= 0)
+            return alert("Informe a quantidade de campos");
+
+        const payload = {
+            tela: dados.nome_tabela.trim(),
+            nome_tabela: dados.nome_tabela.trim(),
+            tipo_tabela: dados.tipo_tabela,
+            qtd_campos: Number(dados.qtd_campos),
+            modulo: dados.modulo,
+        };
+
+        await apiPost("/rest/v1/controle_api", payload);
+
+        alert("Tela incluída com sucesso ✅");
+        await carregar();
+        limpar();
+    };
+
+    const alterar = async () => {
+        if (!editId) return alert("Selecione um registro");
+
+        await apiPatch(`/rest/v1/controle_api?id=eq.${editId}`, {
+            tela: dados.nome_tabela.trim(),
+            nome_tabela: dados.nome_tabela.trim(),
+            tipo_tabela: dados.tipo_tabela,
+            qtd_campos: Number(dados.qtd_campos),
+            modulo: dados.modulo,
         });
+
+        alert("Tela alterada com sucesso ✏️");
+        await carregar();
+        limpar();
+    };
+
+    const excluir = async () => {
+        if (!editId) return alert("Selecione um registro");
+        if (!window.confirm("Confirma exclusão da tela?")) return;
+
+        await apiDelete(`/rest/v1/controle_api?id=eq.${editId}`);
+
+        alert("Tela excluída com sucesso 🗑️");
+        await carregar();
+        limpar();
+    };
+
+    const selecionar = (item) => {
+        setDados({
+            nome_tabela: item.tela,
+            tipo_tabela: item.tipo_tabela,
+            qtd_campos: item.qtd_campos,
+            modulo: item.modulo,
+        });
+        setEditId(item.id);
         setAba("cadastro");
-        setErro("");
-    }
+    };
 
-    async function incluir() {
-        setErro("");
-
-        const nome = camelToSnakeUpper(form.nome_tabela);
-        const qtd = Number(form.qtd_campos);
-
-        if (!nome) return setErro("Informe o Nome da Tela.");
-        if (!form.tipo_tabela) return setErro("Informe o Tipo.");
-        if (!form.modulo) return setErro("Informe o Módulo.");
-        if (!Number.isFinite(qtd) || qtd <= 0) return setErro("Informe um Tamanho (qtd_campos) válido (> 0).");
-        if (!user?.id) return setErro("Usuário não identificado (user.id). Faça login novamente.");
-
-        setBusy(true);
-        try {
-            // não enviar nivel_api/peso_api (trigger calcula)
-            const payload = {
-                nome_tabela: nome,
-                tipo_tabela: form.tipo_tabela,
-                qtd_campos: qtd,
-                modulo: form.modulo,
-                usuario_id: user.id,
-            };
-
-            // Supabase: para retornar o registro, o helper deve usar Prefer: return=representation
-            const inserted = await apiPost(`/rest/v1/controle_api`, payload, {
-                headers: { Prefer: "return=representation" },
-            });
-
-            // apiPost pode retornar objeto ou array; normaliza
-            const reg = Array.isArray(inserted) ? inserted[0] : inserted;
-
-            // atualiza lista (recarrega para pegar nível/peso da trigger)
-            await carregarLista();
-
-            // carrega no cadastro já em modo edição
-            if (reg?.id) {
-                const row = lista.find((x) => x.id === reg.id) || reg;
-                carregarNoCadastro(row);
-            } else {
-                limparFormulario();
-            }
-        } catch (e) {
-            setErro(e?.message || "Erro ao incluir.");
-        } finally {
-            setBusy(false);
-        }
-    }
-
-    async function alterar() {
-        setErro("");
-
-        if (!form.id) return setErro("Nenhum registro selecionado para alterar.");
-
-        const nome = camelToSnakeUpper(form.nome_tabela);
-        const qtd = Number(form.qtd_campos);
-
-        if (!nome) return setErro("Informe o Nome da Tela.");
-        if (!form.tipo_tabela) return setErro("Informe o Tipo.");
-        if (!form.modulo) return setErro("Informe o Módulo.");
-        if (!Number.isFinite(qtd) || qtd <= 0) return setErro("Informe um Tamanho (qtd_campos) válido (> 0).");
-        if (!user?.id) return setErro("Usuário não identificado (user.id). Faça login novamente.");
-
-        setBusy(true);
-        try {
-            const payload = {
-                nome_tabela: nome,
-                tipo_tabela: form.tipo_tabela,
-                qtd_campos: qtd,
-                modulo: form.modulo,
-                usuario_id: user.id,
-            };
-
-            await apiPatch(`/rest/v1/controle_api?id=eq.${form.id}`, payload, {
-                headers: { Prefer: "return=representation" },
-            });
-
-            await carregarLista();
-
-            // re-seleciona o registro atualizado (para refletir trigger)
-            const atualizado = (await apiGet(
-                `/rest/v1/controle_api?select=id,nome_tabela,tipo_tabela,modulo,qtd_campos,nivel_api,peso_api,created_at,updated_at&id=eq.${form.id}`
-            ))?.[0];
-
-            if (atualizado) carregarNoCadastro(atualizado);
-        } catch (e) {
-            setErro(e?.message || "Erro ao alterar.");
-        } finally {
-            setBusy(false);
-        }
-    }
-
-    async function excluir() {
-        setErro("");
-        if (!form.id) return setErro("Nenhum registro selecionado para excluir.");
-
-        const ok = window.confirm(
-            `Confirma excluir a tela "${form.nome_tabela}"?\n\nEssa exclusão é definitiva.`
-        );
-        if (!ok) return;
-
-        setBusy(true);
-        try {
-            await apiDelete(`/rest/v1/controle_api?id=eq.${form.id}`);
-            await carregarLista();
-            limparFormulario();
-            setAba("consulta");
-        } catch (e) {
-            setErro(e?.message || "Erro ao excluir.");
-        } finally {
-            setBusy(false);
-        }
-    }
-
-    // ---------- UI ----------
+    /* ================= Render ================= */
     return (
         <AppShell>
-            <main className="flex-1 min-h-[calc(100vh-48px)] p-4 overflow-auto">
-                {/* Cabeçalho */}
-                <div className="flex items-center justify-between mb-3">
-                    <h1 className="text-[16px] font-semibold text-gray-800">
-                        Cadastro de Telas
-                    </h1>
+            <div className="mt-[44px] bg-gray-50 h-[calc(100vh-56px)] text-[13px]">
+
+                {/* Título */}
+                <h1 className="text-center text-red-700 font-semibold py-2 text-sm border-b border-gray-300">
+                    CADASTRO DE TELAS
+                </h1>
+
+                {/* Conteúdo */}
+                <div className="p-4 bg-white border-x border-b rounded-b-md flex flex-col gap-4">
 
                     {/* Abas */}
                     <div className="flex gap-2">
                         <button
-                            type="button"
                             onClick={() => setAba("cadastro")}
-                            className={`px-3 py-1.5 rounded border text-[12px] ${aba === "cadastro"
+                            className={`px-5 py-1 rounded border text-[12px] font-medium
+                ${aba === "cadastro"
                                     ? "bg-red-700 text-white border-red-700"
-                                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                                }`}
+                                    : "bg-white text-gray-700 hover:bg-gray-100"}`}
                         >
-                            Aba 1 - Cadastro
+                            Cadastro
                         </button>
 
                         <button
-                            type="button"
                             onClick={() => setAba("consulta")}
-                            className={`px-3 py-1.5 rounded border text-[12px] ${aba === "consulta"
+                            className={`px-5 py-1 rounded border text-[12px] font-medium
+                ${aba === "consulta"
                                     ? "bg-red-700 text-white border-red-700"
-                                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                                }`}
+                                    : "bg-white text-gray-700 hover:bg-gray-100"}`}
                         >
-                            Aba 2 - Consulta
+                            Consulta
                         </button>
                     </div>
-                </div>
 
-                {erro ? (
-                    <div className="mb-3 p-2 rounded border border-red-200 bg-red-50 text-[12px] text-red-700">
-                        {erro}
-                    </div>
-                ) : null}
-
-                {/* ===== ABA CADASTRO ===== */}
-                {aba === "cadastro" && (
-                    <section className="bg-white rounded border border-gray-200 p-3">
-                        <fieldset className="border border-gray-200 rounded p-3">
-                            <legend className="px-2 text-[12px] font-semibold text-red-700">
+                    {/* ================= CADASTRO ================= */}
+                    {aba === "cadastro" && (
+                        <fieldset className="border border-gray-300 rounded p-5">
+                            <legend className="px-3 text-red-700 font-semibold text-[13px]">
                                 Dados da Tela
                             </legend>
 
-                            <div className="grid grid-cols-12 gap-2 items-center">
-                                {/* Nome da Tela */}
-                                <label className="col-span-2 text-right text-[12px] text-gray-700">
-                                    Nome da Tela
-                                </label>
-                                <input
-                                    className="col-span-4 border border-gray-300 rounded px-2 py-1 text-[12px] uppercase"
-                                    value={form.nome_tabela}
+                            {/* Linha 1 */}
+                            <div className="grid grid-cols-12 gap-6 mb-4 items-center">
+                                <Label className="col-span-2">Tela</Label>
+                                <Txt
+                                    className="col-span-4"
+                                    value={dados.nome_tabela}
                                     onChange={(e) =>
-                                        setForm((s) => ({ ...s, nome_tabela: e.target.value }))
+                                        setDados({ ...dados, nome_tabela: e.target.value })
                                     }
-                                    onBlur={() =>
-                                        setForm((s) => ({
-                                            ...s,
-                                            nome_tabela: camelToSnakeUpper(s.nome_tabela),
-                                        }))
-                                    }
-                                    placeholder="Ex: ContasPagar"
                                 />
 
-                                {/* Tipo */}
-                                <label className="col-span-2 text-right text-[12px] text-gray-700">
-                                    Tipo
-                                </label>
-                                <select
-                                    className="col-span-4 border border-gray-300 rounded px-2 py-1 text-[12px]"
-                                    value={form.tipo_tabela}
+                                <Label className="col-span-2">Tipo</Label>
+                                <Sel
+                                    className="col-span-4"
+                                    value={dados.tipo_tabela}
                                     onChange={(e) =>
-                                        setForm((s) => ({ ...s, tipo_tabela: e.target.value }))
+                                        setDados({ ...dados, tipo_tabela: e.target.value })
                                     }
                                 >
-                                    {TIPOS.map((t) => (
-                                        <option key={t} value={t}>
-                                            {t}
-                                        </option>
-                                    ))}
-                                </select>
+                                    <option>Cadastro</option>
+                                    <option>Documento</option>
+                                </Sel>
+                            </div>
 
-                                {/* Tamanho */}
-                                <label className="col-span-2 text-right text-[12px] text-gray-700">
-                                    Tamanho
-                                </label>
-                                <input
-                                    className="col-span-2 border border-gray-300 rounded px-2 py-1 text-[12px] text-center"
-                                    value={form.qtd_campos}
+                            {/* Linha 2 */}
+                            <div className="grid grid-cols-12 gap-6 items-center">
+                                <Label className="col-span-2">Qtd. Campos</Label>
+                                <Txt
+                                    className="col-span-2 text-center"
+                                    value={dados.qtd_campos}
                                     onChange={(e) =>
-                                        setForm((s) => ({
-                                            ...s,
-                                            qtd_campos: e.target.value.replace(/[^\d]/g, ""),
-                                        }))
+                                        setDados({ ...dados, qtd_campos: e.target.value })
                                     }
-                                    placeholder="qtd_campos"
                                 />
 
-                                {/* Módulo */}
-                                <label className="col-span-2 text-right text-[12px] text-gray-700">
-                                    Módulo
-                                </label>
-                                <select
-                                    className="col-span-6 border border-gray-300 rounded px-2 py-1 text-[12px]"
-                                    value={form.modulo}
+                                <Label className="col-span-2">Módulo</Label>
+                                <Sel
+                                    className="col-span-6"
+                                    value={dados.modulo}
                                     onChange={(e) =>
-                                        setForm((s) => ({ ...s, modulo: e.target.value }))
+                                        setDados({ ...dados, modulo: e.target.value })
                                     }
                                 >
-                                    {MODULOS.map((m) => (
-                                        <option key={m} value={m}>
-                                            {m}
-                                        </option>
-                                    ))}
-                                </select>
-
-                                {/* ID (somente leitura) */}
-                                <label className="col-span-2 text-right text-[12px] text-gray-500">
-                                    ID
-                                </label>
-                                <input
-                                    className="col-span-10 border border-gray-200 rounded px-2 py-1 text-[12px] bg-gray-50 text-gray-600"
-                                    value={form.id || ""}
-                                    readOnly
-                                    placeholder="(gerado pelo banco)"
-                                />
+                                    <option>Operacao</option>
+                                    <option>Financeiro</option>
+                                    <option>WMS</option>
+                                    <option>Seguranca</option>
+                                    <option>Oficina</option>
+                                </Sel>
                             </div>
                         </fieldset>
+                    )}
 
-                        {/* Ações */}
-                        <div className="flex items-center gap-2 mt-3">
-                            {!form.id ? (
-                                <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={incluir}
-                                    className="px-3 py-2 rounded bg-green-700 text-white text-[12px] hover:bg-green-800 disabled:opacity-60"
-                                >
-                                    Incluir
-                                </button>
-                            ) : (
-                                <>
-                                    <button
-                                        type="button"
-                                        disabled={busy}
-                                        onClick={alterar}
-                                        className="px-3 py-2 rounded bg-blue-700 text-white text-[12px] hover:bg-blue-800 disabled:opacity-60"
-                                    >
-                                        Alterar
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        disabled={busy}
-                                        onClick={excluir}
-                                        className="px-3 py-2 rounded bg-red-700 text-white text-[12px] hover:bg-red-800 disabled:opacity-60"
-                                    >
-                                        Excluir
-                                    </button>
-                                </>
-                            )}
-
-                            <button
-                                type="button"
-                                disabled={busy}
-                                onClick={limparFormulario}
-                                className="px-3 py-2 rounded bg-gray-200 text-gray-800 text-[12px] hover:bg-gray-300 disabled:opacity-60"
-                            >
-                                Limpar
-                            </button>
-
-                            <div className="ml-auto text-[12px] text-gray-600">
-                                {busy ? "Processando..." : null}
-                            </div>
-                        </div>
-
-                        {/* Dica rápida */}
-                        <div className="mt-2 text-[11px] text-gray-500">
-                            Obs: <b>nível</b> e <b>peso</b> são calculados automaticamente pela trigger com base em <b>qtd_campos</b>.
-                        </div>
-                    </section>
-                )}
-
-                {/* ===== ABA CONSULTA ===== */}
-                {aba === "consulta" && (
-                    <section className="bg-white rounded border border-gray-200 p-3">
-                        {/* filtros */}
-                        <fieldset className="border border-gray-200 rounded p-3">
-                            <legend className="px-2 text-[12px] font-semibold text-red-700">
-                                Consulta
+                    {/* ================= CONSULTA ================= */}
+                    {aba === "consulta" && (
+                        <fieldset className="border border-gray-300 rounded p-4">
+                            <legend className="px-3 text-red-700 font-semibold text-[13px]">
+                                Telas Cadastradas
                             </legend>
 
-                            <div className="grid grid-cols-12 gap-2 items-center">
-                                <label className="col-span-2 text-right text-[12px] text-gray-700">
-                                    Pesquisa
-                                </label>
-                                <input
-                                    className="col-span-6 border border-gray-300 rounded px-2 py-1 text-[12px]"
-                                    value={q}
-                                    onChange={(e) => setQ(e.target.value)}
-                                    placeholder="Digite para filtrar (Nome/Tipo/Módulo)"
-                                />
+                            <div className="border border-gray-300 rounded overflow-auto">
+                                <table className="w-full text-[12px]">
+                                    <thead className="bg-gray-100">
+                                        <tr>
+                                            <th className="border px-2 py-1">Tela</th>
+                                            <th className="border px-2 py-1">Tipo</th>
+                                            <th className="border px-2 py-1">Módulo</th>
+                                            <th className="border px-2 py-1">Qtd</th>
+                                            <th className="border px-2 py-1">Nível</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {lista.map((item) => (
+                                            <tr
+                                                key={item.id}
+                                                onClick={() => selecionar(item)}
+                                                className="cursor-pointer hover:bg-red-50"
+                                            >
+                                                <td className="border px-2 py-1">{item.tela}</td>
+                                                <td className="border px-2 py-1">{item.tipo_tabela}</td>
+                                                <td className="border px-2 py-1">{item.modulo}</td>
+                                                <td className="border px-2 py-1 text-center">
+                                                    {item.qtd_campos}
+                                                </td>
+                                                <td className="border px-2 py-1 text-center">
+                                                    {item.nivel_api}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
 
-                                <label className="col-span-1 text-right text-[12px] text-gray-700">
-                                    Módulo
-                                </label>
-                                <select
-                                    className="col-span-3 border border-gray-300 rounded px-2 py-1 text-[12px]"
-                                    value={fModulo}
-                                    onChange={(e) => setFModulo(e.target.value)}
-                                >
-                                    <option value="Todos">Todos</option>
-                                    {MODULOS.map((m) => (
-                                        <option key={m} value={m}>
-                                            {m}
-                                        </option>
-                                    ))}
-                                </select>
-
-                                <div className="col-span-12 flex items-center justify-between mt-1">
-                                    <button
-                                        type="button"
-                                        onClick={carregarLista}
-                                        disabled={loadingLista}
-                                        className="px-3 py-2 rounded bg-gray-200 text-gray-800 text-[12px] hover:bg-gray-300 disabled:opacity-60"
-                                    >
-                                        Recarregar
-                                    </button>
-
-                                    <div className="text-[12px] text-gray-600">
-                                        {loadingLista ? "Carregando..." : `Exibindo ${filtrada.length} de ${total} registros`}
-                                    </div>
-                                </div>
+                            <div className="text-[11px] text-gray-500 mt-1">
+                                Exibindo {lista.length} registros
                             </div>
                         </fieldset>
+                    )}
+                </div>
 
-                        {/* grid */}
-                        <div className="mt-3 border border-gray-200 rounded overflow-auto">
-                            <table className="min-w-full text-[12px]">
-                                <thead className="bg-gray-50 sticky top-0">
-                                    <tr className="text-gray-700">
-                                        <th className="p-2 text-left border-b">Nome da Tela</th>
-                                        <th className="p-2 text-left border-b">Tipo</th>
-                                        <th className="p-2 text-left border-b">Módulo</th>
-                                        <th className="p-2 text-center border-b">Tamanho</th>
-                                        <th className="p-2 text-center border-b">Nível</th>
-                                        <th className="p-2 text-center border-b">Peso</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {loadingLista ? (
-                                        <tr>
-                                            <td className="p-3 text-gray-500" colSpan={6}>
-                                                Carregando...
-                                            </td>
-                                        </tr>
-                                    ) : filtrada.length === 0 ? (
-                                        <tr>
-                                            <td className="p-3 text-gray-500" colSpan={6}>
-                                                Nenhum registro encontrado.
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        filtrada.map((r) => (
-                                            <tr
-                                                key={r.id}
-                                                className="hover:bg-red-50 cursor-pointer"
-                                                onClick={() => carregarNoCadastro(r)}
-                                                title="Clique para abrir no Cadastro"
-                                            >
-                                                <td className="p-2 border-b">{r.nome_tabela}</td>
-                                                <td className="p-2 border-b">{r.tipo_tabela}</td>
-                                                <td className="p-2 border-b">{r.modulo}</td>
-                                                <td className="p-2 border-b text-center">{r.qtd_campos ?? ""}</td>
-                                                <td className="p-2 border-b text-center">{r.nivel_api ?? ""}</td>
-                                                <td className="p-2 border-b text-center">{r.peso_api ?? ""}</td>
-                                            </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
+                {/* ================= Rodapé ================= */}
+                <div className="border-t border-gray-300 bg-white py-2 px-4 flex gap-8">
 
-                        <div className="mt-2 text-[11px] text-gray-500">
-                            Dica: clique em qualquer linha para abrir na <b>Aba 1 - Cadastro</b> e fazer alteração ou exclusão.
-                        </div>
-                    </section>
-                )}
-            </main>
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="flex flex-col items-center text-[11px] text-gray-700 hover:text-red-700"
+                    >
+                        <XCircle size={18} />
+                        <span>Fechar</span>
+                    </button>
+
+                    <button
+                        onClick={limpar}
+                        className="flex flex-col items-center text-[11px] text-gray-700 hover:text-red-700"
+                    >
+                        <RotateCcw size={18} />
+                        <span>Limpar</span>
+                    </button>
+
+                    <button
+                        onClick={incluir}
+                        className="flex flex-col items-center text-[11px] text-gray-700 hover:text-red-700"
+                    >
+                        <PlusCircle size={18} />
+                        <span>Incluir</span>
+                    </button>
+
+                    <button
+                        onClick={alterar}
+                        className="flex flex-col items-center text-[11px] text-gray-700 hover:text-red-700"
+                    >
+                        <Edit size={18} />
+                        <span>Alterar</span>
+                    </button>
+
+                    <button
+                        onClick={excluir}
+                        className="flex flex-col items-center text-[11px] text-gray-700 hover:text-red-700"
+                    >
+                        <Trash2 size={18} />
+                        <span>Excluir</span>
+                    </button>
+
+                </div>
+            </div>
         </AppShell>
     );
 }
