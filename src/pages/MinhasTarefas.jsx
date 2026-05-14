@@ -22,7 +22,7 @@ export default function MinhasTarefas() {
     setErro("");
     try {
       const rows = await apiGet(
-        `/rest/v1/controle_api?select=id,tela,nome_tabela,tipo_tabela,nivel_api,peso_api,qtd_campos,tecnico_id,tecnico_nome,status_api,status_teste,status_documentacao,observacoes,modulo,data_inicio,data_fim_real` +
+        `/rest/v1/controle_api?select=id,tela,nome_tabela,tipo_tabela,nivel_api,peso_api,qtd_campos,tecnico_id,tecnico_nome,status_api,status_teste,status_documentacao,observacoes,modulo,data_inicio,data_fim_real,endpoints` +
           `&tecnico_id=eq.${encodeURIComponent(tecnicoId)}` +
           `&order=created_at.asc`
       );
@@ -318,6 +318,8 @@ export default function MinhasTarefas() {
                         }
                       />
                     </div>
+
+                    <EndpointsEditor tarefa={t} setErro={setErro} />
                   </div>
                 );
               })
@@ -326,6 +328,63 @@ export default function MinhasTarefas() {
         </>
       )}
     </AppShell>
+  );
+}
+
+async function salvarEndpoints(tarefaId, novosEndpoints, setErro) {
+  try {
+    await apiPatch(`/rest/v1/controle_api?id=eq.${tarefaId}`, {
+      endpoints: novosEndpoints
+    });
+  } catch (e) {
+    setErro(String(e.message || e));
+  }
+}
+
+function EndpointsEditor({ tarefa, setErro }) {
+  const [endpoints, setEndpoints] = useState(tarefa.endpoints || []);
+
+  function adicionar() {
+    setEndpoints([...endpoints, ""]);
+  }
+
+  function atualizar(index, valor) {
+    const novos = [...endpoints];
+    novos[index] = valor;
+    setEndpoints(novos);
+  }
+
+  function remover(index) {
+    const novos = endpoints.filter((_, i) => i !== index);
+    setEndpoints(novos);
+    salvarEndpoints(tarefa.id, novos, setErro);
+  }
+
+  function salvarNoBlur() {
+    salvarEndpoints(tarefa.id, endpoints, setErro);
+  }
+
+  return (
+    <div style={styles.endpointsWrap}>
+      <div style={styles.endpointsTitle}>Endpoints</div>
+      {endpoints.map((ep, i) => (
+        <div key={i} style={styles.endpointRow}>
+          <input
+            style={styles.endpointInput}
+            value={ep}
+            placeholder="Ex: /rest/v1/rota..."
+            onChange={(e) => atualizar(i, e.target.value)}
+            onBlur={salvarNoBlur}
+          />
+          <button style={styles.btnRemoveEp} onClick={() => remover(i)} title="Remover endpoint">
+            ✖
+          </button>
+        </div>
+      ))}
+      <button style={styles.btnAddEp} onClick={adicionar}>
+        + Adicionar Endpoint
+      </button>
+    </div>
   );
 }
 
@@ -428,6 +487,13 @@ const styles = {
 
   obsWrap: { marginTop: 12 },
   textarea: { width: "100%", minHeight: 70, padding: 10 },
+
+  endpointsWrap: { marginTop: 16, background: "#f9fafb", padding: 12, borderRadius: 12, border: "1px dashed #d1d5db" },
+  endpointsTitle: { fontSize: 13, fontWeight: 800, marginBottom: 10, color: "#374151" },
+  endpointRow: { display: "flex", gap: 8, marginBottom: 8 },
+  endpointInput: { flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 13 },
+  btnRemoveEp: { background: "#fee2e2", color: "#991b1b", border: "none", borderRadius: 8, padding: "0 12px", cursor: "pointer", fontWeight: "bold" },
+  btnAddEp: { background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontWeight: 600, color: "#374151", marginTop: 4 },
 
   err: {
     marginTop: 10,
