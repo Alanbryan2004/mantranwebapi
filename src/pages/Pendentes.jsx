@@ -14,10 +14,10 @@ export default function Pendentes() {
   const [erro, setErro] = useState("");
 
   // filtros
+  const [buscaNome, setBuscaNome] = useState("");
   const [tipo, setTipo] = useState("");
   const [nivel, setNivel] = useState("");
   const [minCampos, setMinCampos] = useState("");
-  const [maxCampos, setMaxCampos] = useState("");
 
   // ordenação
   const [orderBy, setOrderBy] = useState("qtd_campos");
@@ -36,10 +36,10 @@ export default function Pendentes() {
       `&tecnico_id=is.null` +
       `&status_api=eq.Pendente`;
 
+    if (buscaNome) q += `&nome_tabela=ilike.*${buscaNome}*`;
     if (tipo) q += `&tipo_tabela=eq.${tipo}`;
     if (nivel) q += `&nivel_api=eq.${nivel}`;
     if (minCampos) q += `&qtd_campos=gte.${minCampos}`;
-    if (maxCampos) q += `&qtd_campos=lte.${maxCampos}`;
 
     q += `&order=${orderBy}.${orderDir}`;
 
@@ -60,8 +60,11 @@ export default function Pendentes() {
   }
 
   useEffect(() => {
-    carregar();
-  }, []);
+    const timer = setTimeout(() => {
+      carregar();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [buscaNome]);
 
   function abrirModal(row) {
     setSelected(row);
@@ -108,6 +111,13 @@ export default function Pendentes() {
     <AppShell title="Pendentes">
       {/* FILTROS */}
       <div style={styles.filters}>
+        <input
+          placeholder="Buscar nome..."
+          value={buscaNome}
+          onChange={(e) => setBuscaNome(e.target.value)}
+          style={styles.input}
+        />
+
         <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={styles.input}>
           <option value="">Tipo (Todos)</option>
           {TIPOS.map((t) => (
@@ -127,14 +137,6 @@ export default function Pendentes() {
           type="number"
           value={minCampos}
           onChange={(e) => setMinCampos(e.target.value)}
-          style={styles.input}
-        />
-
-        <input
-          placeholder="Campos máx"
-          type="number"
-          value={maxCampos}
-          onChange={(e) => setMaxCampos(e.target.value)}
           style={styles.input}
         />
 

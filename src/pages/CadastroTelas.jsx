@@ -1,54 +1,32 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-    XCircle,
-    RotateCcw,
-    PlusCircle,
-    Edit,
-    Trash2,
+    XCircle, RotateCcw, PlusCircle, Pencil, Trash2,
+    ChevronLeft, ChevronRight,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
 import { apiGet, apiPost, apiPatch, apiDelete } from "../services/api";
 
-/* ================= Helpers visuais ================= */
-function Label({ children }) {
-    return (
-        <label className="text-[12px] text-gray-700 pr-2">
-            {children}
-        </label>
-    );
+const PAGE_SIZE = 20;
+
+function paginas(atual, total) {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    const set = new Set([1, total, atual, atual - 1, atual + 1].filter(p => p >= 1 && p <= total));
+    const sorted = [...set].sort((a, b) => a - b);
+    const result = [];
+    for (let i = 0; i < sorted.length; i++) {
+        if (i > 0 && sorted[i] - sorted[i - 1] > 1) result.push("...");
+        result.push(sorted[i]);
+    }
+    return result;
 }
 
-function Txt(props) {
-    return (
-        <input
-            {...props}
-            className="border border-gray-300 rounded px-2 py-[3px] h-[28px]
-      text-[13px] w-full focus:outline-none focus:ring-1 focus:ring-red-300"
-        />
-    );
-}
-
-function Sel({ children, ...rest }) {
-    return (
-        <select
-            {...rest}
-            className="border border-gray-300 rounded px-2 py-[3px] h-[28px]
-      text-[13px] w-full focus:outline-none focus:ring-1 focus:ring-red-300"
-        >
-            {children}
-        </select>
-    );
-}
-
-/* ================= Componente ================= */
 export default function CadastroTelas() {
     const navigate = useNavigate();
 
-    const [aba, setAba] = useState("cadastro");
     const [lista, setLista] = useState([]);
     const [editId, setEditId] = useState(null);
-
+    const [pagina, setPagina] = useState(1);
     const [dados, setDados] = useState({
         nome_tabela: "",
         tipo_tabela: "Cadastro",
@@ -56,53 +34,44 @@ export default function CadastroTelas() {
         modulo: "Operacao",
     });
 
-    /* ================= Load ================= */
     async function carregar() {
         const data = await apiGet(
             "/rest/v1/controle_api?select=id,tela,nome_tabela,tipo_tabela,modulo,qtd_campos,nivel_api&order=nome_tabela.asc"
         );
         setLista(data || []);
+        setPagina(1);
     }
 
-    useEffect(() => {
-        carregar();
-    }, []);
+    useEffect(() => { carregar(); }, []);
 
-    /* ================= Ações ================= */
+    const totalPaginas = Math.max(1, Math.ceil(lista.length / PAGE_SIZE));
+    const inicio = (pagina - 1) * PAGE_SIZE;
+    const listaExibida = lista.slice(inicio, inicio + PAGE_SIZE);
+
     const limpar = () => {
-        setDados({
-            nome_tabela: "",
-            tipo_tabela: "Cadastro",
-            qtd_campos: "",
-            modulo: "Operacao",
-        });
+        setDados({ nome_tabela: "", tipo_tabela: "Cadastro", qtd_campos: "", modulo: "Operacao" });
         setEditId(null);
     };
 
     const incluir = async () => {
-        if (!dados.nome_tabela.trim())
-            return alert("Informe a Tela");
+        if (!dados.nome_tabela.trim()) return alert("Informe a Tela");
+        if (!dados.qtd_campos || Number(dados.qtd_campos) <= 0) return alert("Informe a quantidade de campos");
 
-        if (!dados.qtd_campos || Number(dados.qtd_campos) <= 0)
-            return alert("Informe a quantidade de campos");
-
-        const payload = {
+        await apiPost("/rest/v1/controle_api", {
             tela: dados.nome_tabela.trim(),
             nome_tabela: dados.nome_tabela.trim(),
             tipo_tabela: dados.tipo_tabela,
             qtd_campos: Number(dados.qtd_campos),
             modulo: dados.modulo,
-        };
+        });
 
-        await apiPost("/rest/v1/controle_api", payload);
-
-        alert("Tela incluída com sucesso ✅");
+        alert("Tela incluída com sucesso");
         await carregar();
         limpar();
     };
 
     const alterar = async () => {
-        if (!editId) return alert("Selecione um registro");
+        if (!editId) return alert("Selecione um registro na tabela");
 
         await apiPatch(`/rest/v1/controle_api?id=eq.${editId}`, {
             tela: dados.nome_tabela.trim(),
@@ -112,18 +81,18 @@ export default function CadastroTelas() {
             modulo: dados.modulo,
         });
 
-        alert("Tela alterada com sucesso ✏️");
+        alert("Tela alterada com sucesso");
         await carregar();
         limpar();
     };
 
     const excluir = async () => {
-        if (!editId) return alert("Selecione um registro");
+        if (!editId) return alert("Selecione um registro na tabela");
         if (!window.confirm("Confirma exclusão da tela?")) return;
 
         await apiDelete(`/rest/v1/controle_api?id=eq.${editId}`);
 
-        alert("Tela excluída com sucesso 🗑️");
+        alert("Tela excluída com sucesso");
         await carregar();
         limpar();
     };
@@ -136,197 +105,304 @@ export default function CadastroTelas() {
             modulo: item.modulo,
         });
         setEditId(item.id);
-        setAba("cadastro");
     };
 
-    /* ================= Render ================= */
     return (
         <AppShell>
-            <div className="mt-[44px] bg-gray-50 h-[calc(100vh-56px)] text-[13px]">
+            {/* margin: -16 cancela o padding do AppShell e deixa a tela edge-to-edge */}
+            <div style={{ margin: -16, display: "flex", flexDirection: "column", minHeight: "calc(100vh - 56px)" }}>
 
-                {/* Título */}
-                <h1 className="text-center text-red-700 font-semibold py-2 text-sm border-b border-gray-300">
-                    CADASTRO DE TELAS
-                </h1>
+                {/* ── Título ── */}
+                <div style={s.titulo}>CADASTRO DE TELAS</div>
 
-                {/* Conteúdo */}
-                <div className="p-4 bg-white border-x border-b rounded-b-md flex flex-col gap-4">
+                {/* ── Corpo ── */}
+                <div style={{ flex: 1, padding: "12px 16px 70px" }}>
 
-                    {/* Abas */}
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => setAba("cadastro")}
-                            className={`px-5 py-1 rounded border text-[12px] font-medium
-                ${aba === "cadastro"
-                                    ? "bg-red-700 text-white border-red-700"
-                                    : "bg-white text-gray-700 hover:bg-gray-100"}`}
-                        >
-                            Cadastro
-                        </button>
+                    {/* Fieldset Parâmetros */}
+                    <fieldset style={s.fieldset}>
+                        <legend style={s.legend}>Parâmetros</legend>
 
-                        <button
-                            onClick={() => setAba("consulta")}
-                            className={`px-5 py-1 rounded border text-[12px] font-medium
-                ${aba === "consulta"
-                                    ? "bg-red-700 text-white border-red-700"
-                                    : "bg-white text-gray-700 hover:bg-gray-100"}`}
-                        >
-                            Consulta
-                        </button>
-                    </div>
-
-                    {/* ================= CADASTRO ================= */}
-                    {aba === "cadastro" && (
-                        <fieldset className="border border-gray-300 rounded p-5">
-                            <legend className="px-3 text-red-700 font-semibold text-[13px]">
-                                Dados da Tela
-                            </legend>
-
-                            {/* Linha 1 */}
-                            <div className="grid grid-cols-12 gap-6 mb-4 items-center">
-                                <Label className="col-span-2">Tela</Label>
-                                <Txt
-                                    className="col-span-4"
+                        <div style={s.grid2}>
+                            <Campo label="Tela">
+                                <input
                                     value={dados.nome_tabela}
-                                    onChange={(e) =>
-                                        setDados({ ...dados, nome_tabela: e.target.value })
-                                    }
+                                    onChange={(e) => setDados({ ...dados, nome_tabela: e.target.value })}
+                                    style={s.input}
                                 />
+                            </Campo>
 
-                                <Label className="col-span-2">Tipo</Label>
-                                <Sel
-                                    className="col-span-4"
+                            <Campo label="Tipo">
+                                <select
                                     value={dados.tipo_tabela}
-                                    onChange={(e) =>
-                                        setDados({ ...dados, tipo_tabela: e.target.value })
-                                    }
+                                    onChange={(e) => setDados({ ...dados, tipo_tabela: e.target.value })}
+                                    style={s.input}
                                 >
                                     <option>Cadastro</option>
                                     <option>Documento</option>
-                                </Sel>
-                            </div>
+                                </select>
+                            </Campo>
 
-                            {/* Linha 2 */}
-                            <div className="grid grid-cols-12 gap-6 items-center">
-                                <Label className="col-span-2">Qtd. Campos</Label>
-                                <Txt
-                                    className="col-span-2 text-center"
+                            <Campo label="Qtd. Campos">
+                                <input
+                                    type="number"
+                                    min="0"
                                     value={dados.qtd_campos}
-                                    onChange={(e) =>
-                                        setDados({ ...dados, qtd_campos: e.target.value })
-                                    }
+                                    onChange={(e) => setDados({ ...dados, qtd_campos: e.target.value })}
+                                    style={{ ...s.input, width: 100 }}
                                 />
+                            </Campo>
 
-                                <Label className="col-span-2">Módulo</Label>
-                                <Sel
-                                    className="col-span-6"
+                            <Campo label="Módulo">
+                                <select
                                     value={dados.modulo}
-                                    onChange={(e) =>
-                                        setDados({ ...dados, modulo: e.target.value })
-                                    }
+                                    onChange={(e) => setDados({ ...dados, modulo: e.target.value })}
+                                    style={s.input}
                                 >
                                     <option>Operacao</option>
                                     <option>Financeiro</option>
                                     <option>WMS</option>
                                     <option>Seguranca</option>
                                     <option>Oficina</option>
-                                </Sel>
-                            </div>
-                        </fieldset>
-                    )}
+                                </select>
+                            </Campo>
+                        </div>
+                    </fieldset>
 
-                    {/* ================= CONSULTA ================= */}
-                    {aba === "consulta" && (
-                        <fieldset className="border border-gray-300 rounded p-4">
-                            <legend className="px-3 text-red-700 font-semibold text-[13px]">
-                                Telas Cadastradas
-                            </legend>
+                    {/* Fieldset Registros */}
+                    <fieldset style={{ ...s.fieldset, marginTop: 12 }}>
+                        <legend style={s.legend}>Registros Cadastrados</legend>
 
-                            <div className="border border-gray-300 rounded overflow-auto">
-                                <table className="w-full text-[12px]">
-                                    <thead className="bg-gray-100">
-                                        <tr>
-                                            <th className="border px-2 py-1">Tela</th>
-                                            <th className="border px-2 py-1">Tipo</th>
-                                            <th className="border px-2 py-1">Módulo</th>
-                                            <th className="border px-2 py-1">Qtd</th>
-                                            <th className="border px-2 py-1">Nível</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {lista.map((item) => (
-                                            <tr
-                                                key={item.id}
-                                                onClick={() => selecionar(item)}
-                                                className="cursor-pointer hover:bg-red-50"
-                                            >
-                                                <td className="border px-2 py-1">{item.tela}</td>
-                                                <td className="border px-2 py-1">{item.tipo_tabela}</td>
-                                                <td className="border px-2 py-1">{item.modulo}</td>
-                                                <td className="border px-2 py-1 text-center">
-                                                    {item.qtd_campos}
-                                                </td>
-                                                <td className="border px-2 py-1 text-center">
-                                                    {item.nivel_api}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                        <table style={s.table}>
+                            <thead>
+                                <tr>
+                                    {["Tela", "Tipo", "Módulo", "Qtd. Campos", "Nível"].map((h, i) => (
+                                        <th key={h} style={{ ...s.th, textAlign: i === 0 ? "left" : "center" }}>{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {listaExibida.length === 0 && (
+                                    <tr>
+                                        <td colSpan={5} style={{ ...s.td, textAlign: "center", color: "#9ca3af", padding: 16 }}>
+                                            Nenhum registro encontrado
+                                        </td>
+                                    </tr>
+                                )}
+                                {listaExibida.map((item) => (
+                                    <tr
+                                        key={item.id}
+                                        onClick={() => selecionar(item)}
+                                        style={{
+                                            cursor: "pointer",
+                                            background: editId === item.id ? "#fefce8" : "#fff",
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = editId === item.id ? "#fef9c3" : "#fff1f2"}
+                                        onMouseLeave={e => e.currentTarget.style.background = editId === item.id ? "#fefce8" : "#fff"}
+                                    >
+                                        <td style={{ ...s.td, color: "#1d4ed8" }}>{item.tela}</td>
+                                        <td style={{ ...s.td, textAlign: "center", color: "#1d4ed8" }}>{item.tipo_tabela}</td>
+                                        <td style={{ ...s.td, textAlign: "center", color: "#1d4ed8" }}>{item.modulo}</td>
+                                        <td style={{ ...s.td, textAlign: "center", color: "#1d4ed8" }}>{item.qtd_campos}</td>
+                                        <td style={{ ...s.td, textAlign: "center", color: "#1d4ed8" }}>{item.nivel_api}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
 
-                            <div className="text-[11px] text-gray-500 mt-1">
-                                Exibindo {lista.length} registros
+                        {/* Paginação */}
+                        <div style={s.paginacao}>
+                            <span style={s.paginacaoInfo}>
+                                {lista.length === 0
+                                    ? "0 registros"
+                                    : `Exibindo ${inicio + 1}–${Math.min(inicio + PAGE_SIZE, lista.length)} de ${lista.length} registros`}
+                            </span>
+
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                <BtnPag
+                                    onClick={() => setPagina(p => p - 1)}
+                                    disabled={pagina === 1}
+                                >
+                                    <ChevronLeft size={12} /> Ant
+                                </BtnPag>
+
+                                {paginas(pagina, totalPaginas).map((item, i) =>
+                                    item === "..." ? (
+                                        <span key={`e${i}`} style={{ fontSize: 11, color: "#9ca3af", padding: "0 2px" }}>…</span>
+                                    ) : (
+                                        <BtnPag
+                                            key={item}
+                                            onClick={() => setPagina(item)}
+                                            ativo={pagina === item}
+                                        >
+                                            {item}
+                                        </BtnPag>
+                                    )
+                                )}
+
+                                <BtnPag
+                                    onClick={() => setPagina(p => p + 1)}
+                                    disabled={pagina === totalPaginas}
+                                >
+                                    Próx <ChevronRight size={12} />
+                                </BtnPag>
                             </div>
-                        </fieldset>
-                    )}
+                        </div>
+                    </fieldset>
                 </div>
 
-                {/* ================= Rodapé ================= */}
-                <div className="border-t border-gray-300 bg-white py-2 px-4 flex gap-8">
-
-                    <button
-                        onClick={() => navigate(-1)}
-                        className="flex flex-col items-center text-[11px] text-gray-700 hover:text-red-700"
-                    >
-                        <XCircle size={18} />
-                        <span>Fechar</span>
-                    </button>
-
-                    <button
-                        onClick={limpar}
-                        className="flex flex-col items-center text-[11px] text-gray-700 hover:text-red-700"
-                    >
-                        <RotateCcw size={18} />
-                        <span>Limpar</span>
-                    </button>
-
-                    <button
-                        onClick={incluir}
-                        className="flex flex-col items-center text-[11px] text-gray-700 hover:text-red-700"
-                    >
-                        <PlusCircle size={18} />
-                        <span>Incluir</span>
-                    </button>
-
-                    <button
-                        onClick={alterar}
-                        className="flex flex-col items-center text-[11px] text-gray-700 hover:text-red-700"
-                    >
-                        <Edit size={18} />
-                        <span>Alterar</span>
-                    </button>
-
-                    <button
-                        onClick={excluir}
-                        className="flex flex-col items-center text-[11px] text-gray-700 hover:text-red-700"
-                    >
-                        <Trash2 size={18} />
-                        <span>Excluir</span>
-                    </button>
-
+                {/* ── Rodapé ── */}
+                <div style={s.rodape}>
+                    <BtnRodape icon={<XCircle size={22} />} label="Fechar"  onClick={() => navigate(-1)} />
+                    <BtnRodape icon={<RotateCcw size={22} />} label="Limpar"  onClick={limpar} />
+                    <BtnRodape icon={<PlusCircle size={22} />} label="Incluir" onClick={incluir} />
+                    <BtnRodape icon={<Pencil size={22} />} label="Alterar" onClick={alterar} />
+                    <BtnRodape icon={<Trash2 size={22} />} label="Excluir" onClick={excluir} />
                 </div>
             </div>
         </AppShell>
     );
 }
+
+function Campo({ label, children }) {
+    return (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={s.label}>{label}</span>
+            <div style={{ flex: 1 }}>{children}</div>
+        </div>
+    );
+}
+
+function BtnRodape({ icon, label, onClick }) {
+    return (
+        <button onClick={onClick} style={s.btnRodape}
+            onMouseEnter={e => { e.currentTarget.style.color = "#991b1b"; }}
+            onMouseLeave={e => { e.currentTarget.style.color = "#b91c1c"; }}
+        >
+            {icon}
+            <span style={{ fontSize: 11, fontWeight: 500 }}>{label}</span>
+        </button>
+    );
+}
+
+function BtnPag({ onClick, disabled, ativo, children }) {
+    return (
+        <button
+            onClick={onClick}
+            disabled={disabled}
+            style={{
+                display: "flex", alignItems: "center", gap: 2,
+                padding: "2px 6px", fontSize: 11, borderRadius: 4, cursor: disabled ? "not-allowed" : "pointer",
+                border: "1px solid",
+                borderColor: ativo ? "#b91c1c" : "#d1d5db",
+                background: ativo ? "#b91c1c" : "#fff",
+                color: ativo ? "#fff" : disabled ? "#d1d5db" : "#374151",
+                minWidth: 24, justifyContent: "center",
+            }}
+        >
+            {children}
+        </button>
+    );
+}
+
+const s = {
+    titulo: {
+        textAlign: "center",
+        color: "#b91c1c",
+        fontWeight: 600,
+        fontSize: 13,
+        padding: "8px 0",
+        borderBottom: "1px solid #d1d5db",
+        letterSpacing: "0.08em",
+        background: "#fff",
+    },
+    fieldset: {
+        border: "1px solid #d1d5db",
+        borderRadius: 6,
+        padding: "4px 16px 12px",
+        background: "#fff",
+    },
+    legend: {
+        color: "#b91c1c",
+        fontWeight: 600,
+        fontSize: 12,
+        padding: "0 6px",
+    },
+    grid2: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: "8px 32px",
+        marginTop: 4,
+    },
+    label: {
+        fontSize: 12,
+        color: "#374151",
+        width: 110,
+        flexShrink: 0,
+    },
+    input: {
+        width: "100%",
+        border: "1px solid #d1d5db",
+        borderRadius: 4,
+        padding: "2px 8px",
+        height: 26,
+        fontSize: 12,
+        color: "#111827",
+        background: "#fff",
+        boxSizing: "border-box",
+        outline: "none",
+    },
+    table: {
+        width: "100%",
+        borderCollapse: "collapse",
+        fontSize: 12,
+        marginTop: 4,
+    },
+    th: {
+        background: "#6b7280",
+        color: "#fff",
+        border: "1px solid #9ca3af",
+        padding: "5px 10px",
+        fontWeight: 600,
+        fontSize: 12,
+    },
+    td: {
+        border: "1px solid #e5e7eb",
+        padding: "4px 10px",
+        fontSize: 12,
+    },
+    paginacao: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginTop: 8,
+    },
+    paginacaoInfo: {
+        fontSize: 11,
+        color: "#6b7280",
+    },
+    rodape: {
+        position: "fixed",
+        bottom: 0,
+        left: 220,
+        right: 0,
+        background: "#fff",
+        borderTop: "1px solid #d1d5db",
+        display: "flex",
+        alignItems: "center",
+        gap: 28,
+        padding: "6px 24px",
+        zIndex: 50,
+    },
+    btnRodape: {
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 2,
+        color: "#b91c1c",
+        background: "none",
+        border: "none",
+        cursor: "pointer",
+        padding: "2px 4px",
+        transition: "color 0.15s",
+    },
+};

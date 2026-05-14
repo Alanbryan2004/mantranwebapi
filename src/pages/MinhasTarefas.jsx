@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "../components/AppShell";
-import { apiGet, rpc } from "../services/api";
+import { apiGet, rpc, apiPatch } from "../services/api";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function MinhasTarefas() {
@@ -67,6 +67,26 @@ export default function MinhasTarefas() {
         p_tecnico_id: tecnicoId,
         p_tecnico_nome: tecnicoNome,
       });
+
+      // Garantir que a fase correta fique como "Trabalhando" e as finalizadas não sejam sobrescritas
+      let newApi = tarefa.status_api || "Pendente";
+      let newTeste = tarefa.status_teste || "Pendente";
+      let newDoc = tarefa.status_documentacao || "Pendente";
+
+      if (newApi !== "Finalizado") {
+        newApi = "Trabalhando";
+      } else if (newTeste !== "Finalizado") {
+        newTeste = "Trabalhando";
+      } else if (newDoc !== "Finalizado") {
+        newDoc = "Trabalhando";
+      }
+
+      await apiPatch(`/rest/v1/controle_api?id=eq.${tarefa.id}`, {
+        status_api: newApi,
+        status_teste: newTeste,
+        status_documentacao: newDoc,
+      });
+
       await carregar();
     } catch (e) {
       setErro(String(e.message || e));
@@ -112,6 +132,29 @@ export default function MinhasTarefas() {
       await rpc("finalizar_trabalho", {
         p_controle_api_id: tarefa.id,
         p_tecnico_id: tecnicoId,
+      });
+      await carregar();
+    } catch (e) {
+      setErro(String(e.message || e));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function devolver(tarefa) {
+    if (!window.confirm(`Tem certeza que deseja devolver a tarefa "${tarefa.nome_tabela}" para a lista de Pendentes?`)) {
+      return;
+    }
+    setBusyId(tarefa.id);
+    try {
+      await apiPatch(`/rest/v1/controle_api?id=eq.${tarefa.id}`, {
+        tecnico_id: null,
+        tecnico_nome: null,
+        status_api: "Pendente",
+        status_teste: "Pendente",
+        status_documentacao: "Pendente",
+        data_inicio: null,
+        tela: ""
       });
       await carregar();
     } catch (e) {
@@ -234,6 +277,15 @@ export default function MinhasTarefas() {
                       >
                         ⏹ Finalizar
                       </button>
+
+                      <button
+                        style={btnWarning(!aberto)}
+                        disabled={busyId === t.id || aberto}
+                        onClick={() => devolver(t)}
+                        title="Devolver para Pendentes"
+                      >
+                        ↩ Devolver
+                      </button>
                     </div>
 
                     <div style={styles.statusRow}>
@@ -320,6 +372,15 @@ function btnDanger(active) {
     ...styles.btn,
     borderColor: active ? "#ef4444" : "#e5e7eb",
     color: active ? "#ef4444" : "#111827",
+    opacity: active ? 1 : 0.6,
+  };
+}
+
+function btnWarning(active) {
+  return {
+    ...styles.btn,
+    borderColor: active ? "#f59e0b" : "#e5e7eb",
+    color: active ? "#d97706" : "#111827",
     opacity: active ? 1 : 0.6,
   };
 }
