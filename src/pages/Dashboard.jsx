@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [produtividadeHoras, setProdutividadeHoras] = useState([]);
   const [produtividadeTelas, setProdutividadeTelas] = useState([]);
 const [idsEmAndamento, setIdsEmAndamento] = useState([]);
+const [apontamentos, setApontamentos] = useState([]);
 
   const [erro, setErro] = useState("");
   const [loading, setLoading] = useState(true);
@@ -43,14 +44,13 @@ const HORAS_POR_DIA = 8;
             `?select=id,tecnico_id,tecnico_nome,status_api,status_teste,status_documentacao,modulo` +
             filtro
         );
-// 🔹 Apontamentos abertos (quem está realmente trabalhando)
-const abertos = await apiGet(
-  `/rest/v1/apontamento_tempo?select=controle_api_id&fim=is.null`
+const todosAponts = await apiGet(
+  `/rest/v1/apontamento_tempo?select=tecnico_id,controle_api_id,inicio,fim` + filtro
 );
 
-const idsAbertos = (abertos || []).map(
-  (a) => a.controle_api_id
-);
+const idsAbertos = (todosAponts || [])
+  .filter(a => !a.fim)
+  .map(a => a.controle_api_id);
 
         let prodHoras = [];
         let media = 0;
@@ -77,6 +77,7 @@ const idsAbertos = (abertos || []).map(
         setProdutividadeHoras(prodHoras || []);
         setProdutividadeTelas(prodTelas || []);
         setIdsEmAndamento(idsAbertos);
+        setApontamentos(todosAponts || []);
 
       } catch (e) {
         if (ativo) setErro(String(e.message || e));
@@ -110,6 +111,17 @@ const idsAbertos = (abertos || []).map(
     ).length;
 
     const porTecnico = {};
+    
+    // Cálculo de horas totais por técnico
+    const horasPorTecnico = {};
+    for (const a of apontamentos) {
+      const tid = a.tecnico_id;
+      if (!tid) continue;
+      const start = new Date(a.inicio).getTime();
+      const end = a.fim ? new Date(a.fim).getTime() : Date.now();
+      horasPorTecnico[tid] = (horasPorTecnico[tid] || 0) + (end - start) / 36e5;
+    }
+
     if (isAdmin) {
       for (const r of rows) {
         const key = r.tecnico_nome || "Sem Técnico";
@@ -118,15 +130,16 @@ const idsAbertos = (abertos || []).map(
           pendentes: 0,
           trabalhando: 0,
           concluidas: 0,
+          horasTotais: 0,
         };
 
         porTecnico[key].total++;
+        porTecnico[key].horasTotais = horasPorTecnico[r.tecnico_id] || 0;
 
         if (r.status_api === "Pendente") porTecnico[key].pendentes++;
         if (idsEmAndamento.includes(r.id)) {
-  porTecnico[key].trabalhando++;
-}
-
+          porTecnico[key].trabalhando++;
+        }
 
         if (
           r.status_api === "Finalizado" &&
@@ -139,7 +152,7 @@ const idsAbertos = (abertos || []).map(
     }
 
     return { total, pendentes, trabalhando, concluidas, porTecnico };
-}, [rows, idsEmAndamento, isAdmin]);
+  }, [rows, idsEmAndamento, isAdmin, apontamentos]);
 
   /* =========================
      PRODUTIVIDADE (TELAS)
@@ -149,6 +162,7 @@ const idsAbertos = (abertos || []).map(
       const finalizadas = t.telas_finalizadas || 0;
       const faltam = Math.max(META_SEMANAL_TELAS - finalizadas, 0);
       const percentual = (finalizadas / META_SEMANAL_TELAS) * 100;
+      const horasSemanais = produtividadeHoras.find(ph => ph.tecnico_id === t.tecnico_id)?.horas_trabalhadas || 0;
 
       let status = "verde";
       if (percentual < 60) status = "vermelho";
@@ -160,9 +174,10 @@ const idsAbertos = (abertos || []).map(
         faltam,
         percentual,
         status,
+        horasSemanais,
       };
     });
-  }, [produtividadeTelas]);
+  }, [produtividadeTelas, produtividadeHoras]);
 
   /* =========================
      PREVISÃO DE CONCLUSÃO (MANTIDA)
@@ -246,6 +261,7 @@ const idsAbertos = (abertos || []).map(
                         <Badge label={`Total: ${v.total}`} />
                         <Badge label={`Trabalhando: ${v.trabalhando}`} />
                         <Badge label={`Concluídas: ${v.concluidas}`} />
+                        <Badge label={`Total Horas: ${v.horasTotais.toFixed(1)}h`} style={{ borderColor: "#3b82f6", color: "#1d4ed8" }} />
                       </div>
                     </div>
                   ))}
@@ -260,6 +276,7 @@ const idsAbertos = (abertos || []).map(
                       <Badge label={`Finalizadas: ${t.finalizadas}`} />
                       <Badge label={`Faltam: ${t.faltam}`} />
                       <Badge label={`Meta: ${META_SEMANAL_TELAS}`} />
+                      <Badge label={`Horas: ${t.horasSemanais.toFixed(1)}h`} style={{ borderColor: "#8b5cf6", color: "#6d28d9" }} />
                       <span
                         style={{
                           ...styles.percentual,
@@ -297,8 +314,8 @@ function Card({ title, value }) {
   );
 }
 
-function Badge({ label }) {
-  return <span style={styles.badge}>{label}</span>;
+function Badge({ label, style = {} }) {
+  return <span style={{ ...styles.badge, ...style }}>{label}</span>;
 }
 
 /* =========================

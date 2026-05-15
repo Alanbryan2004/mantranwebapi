@@ -7,10 +7,11 @@ export default function MinhasTarefas() {
   const { user } = useAuth();
 
   const [tarefas, setTarefas] = useState([]);
-  const [apontAbertos, setApontAbertos] = useState([]);
+  const [apontamentos, setApontamentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
   const [busyId, setBusyId] = useState(null);
+  const [now, setNow] = useState(Date.now());
 
   const tecnicoId = user?.id;
   const tecnicoNome = user?.nome;
@@ -27,14 +28,13 @@ export default function MinhasTarefas() {
           `&order=created_at.asc`
       );
 
-      const abertos = await apiGet(
-        `/rest/v1/apontamento_tempo?select=controle_api_id` +
-          `&tecnico_id=eq.${encodeURIComponent(tecnicoId)}` +
-          `&fim=is.null`
+      const allApontamentos = await apiGet(
+        `/rest/v1/apontamento_tempo?select=controle_api_id,inicio,fim` +
+          `&tecnico_id=eq.${encodeURIComponent(tecnicoId)}`
       );
-
+      
       setTarefas(rows || []);
-      setApontAbertos((abertos || []).map((x) => x.controle_api_id));
+      setApontamentos(allApontamentos || []);
     } catch (e) {
       setErro(String(e.message || e));
     } finally {
@@ -45,6 +45,15 @@ export default function MinhasTarefas() {
   useEffect(() => {
     carregar();
   }, [tecnicoId]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const apontAbertos = useMemo(() => {
+    return (apontamentos || []).filter(a => !a.fim).map(a => a.controle_api_id);
+  }, [apontamentos]);
 
   const resumo = useMemo(() => {
     const total = tarefas.length;
@@ -248,8 +257,21 @@ export default function MinhasTarefas() {
                         </div>
                       </div>
 
-                      <div style={styles.statePill}>
-                        {aberto ? "Em andamento" : "Pausada"}
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={styles.timeSpent}>
+                          ⏱️ {formatarTempo(
+                            (apontamentos || [])
+                              .filter(a => a.controle_api_id === t.id)
+                              .reduce((acc, a) => {
+                                const start = new Date(a.inicio).getTime();
+                                const end = a.fim ? new Date(a.fim).getTime() : now;
+                                return acc + (end - start);
+                              }, 0) / 1000
+                          )}
+                        </div>
+                        <div style={styles.statePill}>
+                          {aberto ? "Em andamento" : "Pausada"}
+                        </div>
                       </div>
                     </div>
 
@@ -444,6 +466,15 @@ function btnWarning(active) {
   };
 }
 
+function formatarTempo(segundosTotais) {
+  const h = Math.floor(segundosTotais / 3600);
+  const m = Math.floor((segundosTotais % 3600) / 60);
+  const s = Math.floor(segundosTotais % 60);
+  return `${h.toString().padStart(2, "0")}:${m
+    .toString()
+    .padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
+
 const styles = {
   grid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 },
   card: { background: "#fff", border: "1px solid #eee", borderRadius: 14, padding: 14 },
@@ -469,6 +500,16 @@ const styles = {
     borderRadius: 999,
     background: "#f9fafb",
     border: "1px solid #e5e7eb",
+  },
+
+  timeSpent: {
+    fontSize: 13,
+    fontWeight: 700,
+    fontFamily: "monospace",
+    color: "#374151",
+    background: "#f3f4f6",
+    padding: "6px 10px",
+    borderRadius: 8,
   },
 
   actions: { display: "flex", gap: 8, marginTop: 12 },
