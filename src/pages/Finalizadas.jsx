@@ -88,7 +88,7 @@ export default function Finalizadas() {
             />
             <Card
               title="Média de Horas por Tela"
-              value={`${mediaHoras.toFixed(2)} h`}
+              value={formatarHHMM(mediaHoras)}
             />
           </div>
 
@@ -100,7 +100,7 @@ export default function Finalizadas() {
 
                 <div style={styles.innerCard}>
                   ⏱️ Horas totais:{" "}
-                  <strong>{t.horas.toFixed(1)} h</strong>
+                  <strong>{formatarHHMM(t.horas)}</strong>
                 </div>
 
                 <ul style={styles.ul}>
@@ -121,6 +121,12 @@ export default function Finalizadas() {
       )}
     </AppShell>
   );
+}
+
+function formatarHHMM(horasDecimais) {
+  const h = Math.floor(horasDecimais);
+  const m = Math.round((horasDecimais - h) * 60);
+  return `${h}h ${m}m`;
 }
 
 function Card({ title, value }) {

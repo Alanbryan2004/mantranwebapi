@@ -261,7 +261,7 @@ const idsAbertos = (todosAponts || [])
                         <Badge label={`Total: ${v.total}`} />
                         <Badge label={`Trabalhando: ${v.trabalhando}`} />
                         <Badge label={`Concluídas: ${v.concluidas}`} />
-                        <Badge label={`Total Horas: ${v.horasTotais.toFixed(1)}h`} style={{ borderColor: "#3b82f6", color: "#1d4ed8" }} />
+                        <Badge label={`Total Horas: ${formatarHHMM(v.horasTotais)}`} style={{ borderColor: "#3b82f6", color: "#1d4ed8" }} />
                       </div>
                     </div>
                   ))}
@@ -276,7 +276,7 @@ const idsAbertos = (todosAponts || [])
                       <Badge label={`Finalizadas: ${t.finalizadas}`} />
                       <Badge label={`Faltam: ${t.faltam}`} />
                       <Badge label={`Meta: ${META_SEMANAL_TELAS}`} />
-                      <Badge label={`Horas: ${t.horasSemanais.toFixed(1)}h`} style={{ borderColor: "#8b5cf6", color: "#6d28d9" }} />
+                      <Badge label={`Horas: ${formatarHHMM(t.horasSemanais)}`} style={{ borderColor: "#8b5cf6", color: "#6d28d9" }} />
                       <span
                         style={{
                           ...styles.percentual,
@@ -305,6 +305,12 @@ const idsAbertos = (todosAponts || [])
 /* =========================
    COMPONENTES
 ========================= */
+function formatarHHMM(horasDecimais) {
+  const h = Math.floor(horasDecimais);
+  const m = Math.round((horasDecimais - h) * 60);
+  return `${h}h ${m}m`;
+}
+
 function Card({ title, value }) {
   return (
     <div style={styles.card}>

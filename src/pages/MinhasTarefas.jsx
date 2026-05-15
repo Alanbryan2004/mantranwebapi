@@ -259,14 +259,14 @@ export default function MinhasTarefas() {
 
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <div style={styles.timeSpent}>
-                          ⏱️ {formatarTempo(
-                            (apontamentos || [])
+                          ⏱️ {formatarHHMM(
+                            ((apontamentos || [])
                               .filter(a => a.controle_api_id === t.id)
                               .reduce((acc, a) => {
                                 const start = new Date(a.inicio).getTime();
                                 const end = a.fim ? new Date(a.fim).getTime() : now;
                                 return acc + (end - start);
-                              }, 0) / 1000
+                              }, 0) / 1000) / 3600
                           )}
                         </div>
                         <div style={styles.statePill}>
@@ -466,13 +466,10 @@ function btnWarning(active) {
   };
 }
 
-function formatarTempo(segundosTotais) {
-  const h = Math.floor(segundosTotais / 3600);
-  const m = Math.floor((segundosTotais % 3600) / 60);
-  const s = Math.floor(segundosTotais % 60);
-  return `${h.toString().padStart(2, "0")}:${m
-    .toString()
-    .padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+function formatarHHMM(horasDecimais) {
+  const h = Math.floor(horasDecimais);
+  const m = Math.floor((horasDecimais - h) * 60);
+  return `${h}h ${m}m`;
 }
 
 const styles = {
