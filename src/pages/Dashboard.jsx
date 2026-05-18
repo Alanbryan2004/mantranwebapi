@@ -3,8 +3,6 @@ import AppShell from "../components/AppShell";
 import { apiGet } from "../services/api";
 import { useAuth } from "../contexts/AuthContext";
 
-const META_SEMANAL_TELAS = 5;
-
 export default function Dashboard() {
   const { user } = useAuth();
   const isAdmin = user?.perfil === "Administrador";
@@ -20,7 +18,11 @@ const [apontamentos, setApontamentos] = useState([]);
 const HORAS_POR_TELA = 8;
 const HORAS_POR_DIA = 8;
 
-  
+  const [expandedTech, setExpandedTech] = useState({});
+
+  const toggleExpand = (nome) => {
+    setExpandedTech((prev) => ({ ...prev, [nome]: !prev[nome] }));
+  };
 
   /* =========================
      BUSCA DADOS
@@ -41,7 +43,7 @@ const HORAS_POR_DIA = 8;
         // 🔹 Tarefas
         const data = await apiGet(
           `/rest/v1/controle_api` +
-            `?select=id,tecnico_id,tecnico_nome,status_api,status_teste,status_documentacao,modulo` +
+            `?select=id,tecnico_id,tecnico_nome,status_api,status_teste,status_documentacao,modulo,tela,nome_tabela` +
             filtro
         );
 const todosAponts = await apiGet(
@@ -66,9 +68,24 @@ const idsAbertos = (todosAponts || [])
 
 
           // 🔹 Produtividade NOVA (telas)
-          prodTelas = await apiGet(
+          let pt = await apiGet(
             `/rest/v1/vw_produtividade_telas_semana?select=tecnico_id,tecnico_nome,telas_finalizadas`
           );
+
+          // 🔹 Metas Individuais (se não existir, catch e usa 1)
+          let metasFetch = [];
+          try {
+            metasFetch = await apiGet(`/rest/v1/meta_tecnico?select=tecnico_id,meta_semanal`);
+          } catch (e) {
+            console.log("Aviso: tabela meta_tecnico não encontrada ou erro ao buscar. Usando meta padrão de 1.", e);
+          }
+
+          if (pt && Array.isArray(pt)) {
+            prodTelas = pt.map(p => {
+              const m = metasFetch && metasFetch.find(x => x.tecnico_id === p.tecnico_id);
+              return { ...p, meta_semanal: m ? m.meta_semanal : 1 };
+            });
+          }
         }
 
         if (!ativo) return;
@@ -160,8 +177,9 @@ const idsAbertos = (todosAponts || [])
   const produtividadeTelasFormatada = useMemo(() => {
     return produtividadeTelas.map((t) => {
       const finalizadas = t.telas_finalizadas || 0;
-      const faltam = Math.max(META_SEMANAL_TELAS - finalizadas, 0);
-      const percentual = (finalizadas / META_SEMANAL_TELAS) * 100;
+      const metaTech = t.meta_semanal || 1;
+      const faltam = Math.max(metaTech - finalizadas, 0);
+      const percentual = (finalizadas / metaTech) * 100;
       const horasSemanais = produtividadeHoras.find(ph => ph.tecnico_id === t.tecnico_id)?.horas_trabalhadas || 0;
 
       let status = "verde";
@@ -255,14 +273,60 @@ const idsAbertos = (todosAponts || [])
                 {Object.entries(resumo.porTecnico)
                   .filter(([k]) => k !== "Sem Técnico")
                   .map(([nome, v]) => (
-                    <div key={nome} style={styles.row}>
-                      <div style={{ fontWeight: 800 }}>{nome}</div>
-                      <div style={styles.badges}>
-                        <Badge label={`Total: ${v.total}`} />
-                        <Badge label={`Trabalhando: ${v.trabalhando}`} />
-                        <Badge label={`Concluídas: ${v.concluidas}`} />
-                        <Badge label={`Total Horas: ${formatarHHMM(v.horasTotais)}`} style={{ borderColor: "#3b82f6", color: "#1d4ed8" }} />
+                    <div key={nome} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                      <div 
+                        style={{ ...styles.row, borderBottom: "none", cursor: "pointer" }}
+                        onClick={() => toggleExpand(nome)}
+                      >
+                        <div style={{ fontWeight: 800 }}>{nome}</div>
+                        <div style={styles.badges}>
+                          <Badge label={`Total: ${v.total}`} />
+                          <Badge label={`Trabalhando: ${v.trabalhando}`} />
+                          <Badge label={`Concluídas: ${v.concluidas}`} />
+                          <Badge label={`Total Horas: ${formatarHHMM(v.horasTotais)}`} style={{ borderColor: "#3b82f6", color: "#1d4ed8" }} />
+                        </div>
                       </div>
+                      {expandedTech[nome] && (() => {
+                        const techTasks = rows.filter(r => r.tecnico_nome === nome);
+                        const workingTasks = techTasks.filter(r => idsEmAndamento.includes(r.id));
+                        const pausedTasks = techTasks.filter(r => 
+                          !idsEmAndamento.includes(r.id) && 
+                          !(r.status_api === "Finalizado" && r.status_teste === "Finalizado" && r.status_documentacao === "Finalizado")
+                        );
+
+                        return (
+                          <div style={{ padding: "0px 14px 14px 14px", fontSize: 13, display: "flex", gap: "24px" }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 600, marginBottom: 6, color: "#1d4ed8" }}>▶ Em andamento:</div>
+                              {workingTasks.length > 0 ? (
+                                <ul style={{ paddingLeft: 20, margin: 0, color: "#374151" }}>
+                                  {workingTasks.map(t => (
+                                    <li key={t.id} style={{ marginBottom: 4 }}>
+                                      <strong>{t.tela || t.nome_tabela || "Sem nome"}</strong> <span style={{ color: "#9ca3af", fontSize: 12 }}>({t.modulo})</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <div style={{ color: "#9ca3af", paddingLeft: 4 }}>Nenhuma tela em andamento.</div>
+                              )}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 600, marginBottom: 6, color: "#d97706" }}>⏸ Pausadas / Na fila:</div>
+                              {pausedTasks.length > 0 ? (
+                                <ul style={{ paddingLeft: 20, margin: 0, color: "#374151" }}>
+                                  {pausedTasks.map(t => (
+                                    <li key={t.id} style={{ marginBottom: 4 }}>
+                                      <strong>{t.tela || t.nome_tabela || "Sem nome"}</strong> <span style={{ color: "#9ca3af", fontSize: 12 }}>({t.modulo})</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <div style={{ color: "#9ca3af", paddingLeft: 4 }}>Nenhuma tela pausada.</div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
               </div>
@@ -275,7 +339,7 @@ const idsAbertos = (todosAponts || [])
                     <div style={styles.badges}>
                       <Badge label={`Finalizadas: ${t.finalizadas}`} />
                       <Badge label={`Faltam: ${t.faltam}`} />
-                      <Badge label={`Meta: ${META_SEMANAL_TELAS}`} />
+                      <Badge label={`Meta: ${t.meta_semanal || 1}`} />
                       <Badge label={`Horas: ${formatarHHMM(t.horasSemanais)}`} style={{ borderColor: "#8b5cf6", color: "#6d28d9" }} />
                       <span
                         style={{
