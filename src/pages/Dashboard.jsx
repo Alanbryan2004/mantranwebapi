@@ -297,17 +297,34 @@ const idsAbertos = (todosAponts || [])
                           !(r.status_api === "Finalizado" && r.status_teste === "Finalizado" && r.status_documentacao === "Finalizado")
                         );
 
+                        const calcularHorasTarefa = (tarefaId) => {
+                          const taskAponts = apontamentos.filter(a => a.controle_api_id === tarefaId);
+                          let totalMs = 0;
+                          for (const a of taskAponts) {
+                            const start = new Date(a.inicio).getTime();
+                            const end = a.fim ? new Date(a.fim).getTime() : Date.now();
+                            totalMs += (end - start);
+                          }
+                          return totalMs / 36e5;
+                        };
+
                         return (
                           <div style={{ padding: "0px 14px 14px 14px", fontSize: 13, display: "flex", gap: "24px" }}>
                             <div style={{ flex: 1 }}>
                               <div style={{ fontWeight: 600, marginBottom: 6, color: "#1d4ed8" }}>▶ Em andamento:</div>
                               {workingTasks.length > 0 ? (
                                 <ul style={{ paddingLeft: 20, margin: 0, color: "#374151" }}>
-                                  {workingTasks.map(t => (
-                                    <li key={t.id} style={{ marginBottom: 4 }}>
-                                      <strong>{t.tela || t.nome_tabela || "Sem nome"}</strong> <span style={{ color: "#9ca3af", fontSize: 12 }}>({t.modulo})</span>
-                                    </li>
-                                  ))}
+                                  {workingTasks.map(t => {
+                                    const horasTarefa = calcularHorasTarefa(t.id);
+                                    return (
+                                      <li key={t.id} style={{ marginBottom: 4 }}>
+                                        <strong>{t.tela || t.nome_tabela || "Sem nome"}</strong>{" "}
+                                        <span style={{ color: "#9ca3af", fontSize: 12 }}>({t.modulo})</span>
+                                        {" — "}
+                                        <span style={{ color: "#1d4ed8", fontWeight: 600 }}>⏱️ {formatarHHMM(horasTarefa)}</span>
+                                      </li>
+                                    );
+                                  })}
                                 </ul>
                               ) : (
                                 <div style={{ color: "#9ca3af", paddingLeft: 4 }}>Nenhuma tela em andamento.</div>
@@ -317,11 +334,17 @@ const idsAbertos = (todosAponts || [])
                               <div style={{ fontWeight: 600, marginBottom: 6, color: "#d97706" }}>⏸ Pausadas / Na fila:</div>
                               {pausedTasks.length > 0 ? (
                                 <ul style={{ paddingLeft: 20, margin: 0, color: "#374151" }}>
-                                  {pausedTasks.map(t => (
-                                    <li key={t.id} style={{ marginBottom: 4 }}>
-                                      <strong>{t.tela || t.nome_tabela || "Sem nome"}</strong> <span style={{ color: "#9ca3af", fontSize: 12 }}>({t.modulo})</span>
-                                    </li>
-                                  ))}
+                                  {pausedTasks.map(t => {
+                                    const horasTarefa = calcularHorasTarefa(t.id);
+                                    return (
+                                      <li key={t.id} style={{ marginBottom: 4 }}>
+                                        <strong>{t.tela || t.nome_tabela || "Sem nome"}</strong>{" "}
+                                        <span style={{ color: "#9ca3af", fontSize: 12 }}>({t.modulo})</span>
+                                        {" — "}
+                                        <span style={{ color: "#d97706", fontWeight: 600 }}>⏱️ {formatarHHMM(horasTarefa)}</span>
+                                      </li>
+                                    );
+                                  })}
                                 </ul>
                               ) : (
                                 <div style={{ color: "#9ca3af", paddingLeft: 4 }}>Nenhuma tela pausada.</div>
