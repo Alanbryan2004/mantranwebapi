@@ -1,12 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AppShell from "../components/AppShell";
 import { apiGet } from "../services/api";
 
 export default function Finalizadas() {
   const [telas, setTelas] = useState([]);
-  const [mediaHoras, setMediaHoras] = useState(0);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
+
+  const [usuarios, setUsuarios] = useState([]);
+  const [buscaTela, setBuscaTela] = useState("");
+  const [buscaTecnico, setBuscaTecnico] = useState("");
 
   useEffect(() => {
     let ativo = true;
@@ -16,21 +19,25 @@ export default function Finalizadas() {
         setErro("");
         setLoading(true);
 
-        const tarefas = await apiGet(
-          `/rest/v1/controle_api` +
-            `?select=id,tela,nome_tabela` +
-            `&status_api=eq.Finalizado` +
-            `&status_teste=eq.Finalizado` +
-            `&status_documentacao=eq.Finalizado`
-        );
-
-        const horas = await apiGet(
-          `/rest/v1/apontamento_tempo` +
-            `?select=controle_api_id,inicio,fim` +
-            `&fim=not.is.null`
-        );
+        const [tarefas, horas, listaUsuarios] = await Promise.all([
+          apiGet(
+            `/rest/v1/controle_api` +
+              `?select=id,tela,nome_tabela,tecnico_nome,endpoints` +
+              `&status_api=eq.Finalizado` +
+              `&status_teste=eq.Finalizado` +
+              `&status_documentacao=eq.Finalizado`
+          ),
+          apiGet(
+            `/rest/v1/apontamento_tempo` +
+              `?select=controle_api_id,inicio,fim` +
+              `&fim=not.is.null`
+          ),
+          apiGet(`/rest/v1/usuario?select=id,nome&order=nome.asc`).catch(() => [])
+        ]);
 
         if (!ativo) return;
+
+        setUsuarios(listaUsuarios || []);
 
         const mapa = {};
 
@@ -40,10 +47,23 @@ export default function Finalizadas() {
               tela: t.tela,
               tabelas: [],
               horas: 0,
+              tecnicos: new Set(),
+              endpoints: new Set(),
             };
           }
 
           mapa[t.tela].tabelas.push(t.nome_tabela);
+          if (t.tecnico_nome) {
+            mapa[t.tela].tecnicos.add(t.tecnico_nome);
+          }
+
+          if (t.endpoints && Array.isArray(t.endpoints)) {
+            for (const ep of t.endpoints) {
+              if (ep && ep.trim()) {
+                mapa[t.tela].endpoints.add(ep.trim());
+              }
+            }
+          }
 
           const horasTabela = (horas || []).filter(
             (h) => h.controle_api_id === t.id
@@ -56,12 +76,12 @@ export default function Finalizadas() {
           }
         }
 
-        const lista = Object.values(mapa);
-        const totalHoras = lista.reduce((s, t) => s + t.horas, 0);
-        const media = lista.length ? totalHoras / lista.length : 0;
-
+        const lista = Object.values(mapa).map(item => ({
+          ...item,
+          tecnico: Array.from(item.tecnicos).join(", ") || "Sem Técnico",
+          endpoints: Array.from(item.endpoints),
+        }));
         setTelas(lista);
-        setMediaHoras(media);
       } catch (e) {
         if (ativo) setErro(e.message || String(e));
       } finally {
@@ -73,6 +93,21 @@ export default function Finalizadas() {
     return () => (ativo = false);
   }, []);
 
+  const telasFiltradas = useMemo(() => {
+    return telas.filter((t) => {
+      const matchTela = t.tela.toLowerCase().includes(buscaTela.toLowerCase());
+      const matchTecnico = buscaTecnico
+        ? t.tecnico.toLowerCase().includes(buscaTecnico.toLowerCase())
+        : true;
+      return matchTela && matchTecnico;
+    });
+  }, [telas, buscaTela, buscaTecnico]);
+
+  const mediaHorasFiltradas = useMemo(() => {
+    const total = telasFiltradas.reduce((s, t) => s + t.horas, 0);
+    return telasFiltradas.length ? total / telasFiltradas.length : 0;
+  }, [telasFiltradas]);
+
   return (
     <AppShell title="Finalizadas">
       {loading && <div>Carregando...</div>}
@@ -80,27 +115,64 @@ export default function Finalizadas() {
 
       {!loading && !erro && (
         <>
+          {/* 🔍 FILTROS */}
+          <div style={styles.filterBar}>
+            <input
+              placeholder="🔍 Filtrar por Nome da Tela..."
+              value={buscaTela}
+              onChange={(e) => setBuscaTela(e.target.value)}
+              style={styles.filterInput}
+            />
+
+            <select
+              value={buscaTecnico}
+              onChange={(e) => setBuscaTecnico(e.target.value)}
+              style={styles.filterSelect}
+            >
+              <option value="">👤 Todos os Técnicos</option>
+              {usuarios.map((u) => (
+                <option key={u.id} value={u.nome}>
+                  {u.nome}
+                </option>
+              ))}
+            </select>
+
+            {(buscaTela || buscaTecnico) && (
+              <button
+                onClick={() => {
+                  setBuscaTela("");
+                  setBuscaTecnico("");
+                }}
+                style={styles.clearBtn}
+              >
+                Limpar Filtros
+              </button>
+            )}
+          </div>
+
           {/* 🔢 CARDS TOPO */}
           <div style={styles.grid}>
             <Card
               title="Total de Telas Finalizadas"
-              value={telas.length}
+              value={telasFiltradas.length}
             />
             <Card
               title="Média de Horas por Tela"
-              value={formatarHHMM(mediaHoras)}
+              value={formatarHHMM(mediaHorasFiltradas)}
             />
           </div>
 
           {/* 🔴 FIELDSETS POR TELA */}
           <div style={styles.wrapper}>
-            {telas.map((t) => (
+            {telasFiltradas.map((t) => (
               <fieldset key={t.tela} style={styles.fieldset}>
                 <legend style={styles.legend}>{t.tela}</legend>
 
                 <div style={styles.innerCard}>
-                  ⏱️ Horas totais:{" "}
-                  <strong>{formatarHHMM(t.horas)}</strong>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                    <span>⏱️ Horas totais: <strong>{formatarHHMM(t.horas)}</strong></span>
+                    <span>👤 Finalizado por: <strong>{t.tecnico}</strong></span>
+                  </div>
                 </div>
 
                 <ul style={styles.ul}>
@@ -108,12 +180,25 @@ export default function Finalizadas() {
                     <li key={i}>{tb}</li>
                   ))}
                 </ul>
+
+                {t.endpoints && t.endpoints.length > 0 && (
+                  <div style={styles.endpointsContainer}>
+                    <div style={styles.endpointsTitle}>🔗 Endpoints:</div>
+                    <div style={styles.endpointsList}>
+                      {t.endpoints.map((ep, i) => (
+                        <span key={i} style={styles.endpointTag}>
+                          {ep}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </fieldset>
             ))}
 
-            {telas.length === 0 && (
+            {telasFiltradas.length === 0 && (
               <div style={styles.empty}>
-                Nenhuma tela finalizada
+                Nenhuma tela finalizada encontrada com estes filtros
               </div>
             )}
           </div>
@@ -202,5 +287,72 @@ const styles = {
     padding: 10,
     borderRadius: 10,
     marginBottom: 10,
+  },
+  endpointsContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTop: "1px dashed #e5e7eb",
+  },
+  endpointsTitle: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#4b5563",
+    marginBottom: 6,
+  },
+  endpointsList: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  endpointTag: {
+    background: "#f3f4f6",
+    color: "#374151",
+    padding: "4px 8px",
+    borderRadius: 6,
+    fontSize: 12,
+    fontFamily: "monospace",
+    border: "1px solid #e5e7eb",
+  },
+  filterBar: {
+    display: "flex",
+    gap: 12,
+    marginBottom: 20,
+    background: "#fff",
+    padding: 16,
+    borderRadius: 14,
+    border: "1px solid #e5e7eb",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+  filterInput: {
+    flex: 1,
+    minWidth: 200,
+    padding: "10px 14px",
+    borderRadius: 10,
+    border: "1px solid #d1d5db",
+    fontSize: 14,
+    outline: "none",
+    transition: "border-color 0.2s",
+  },
+  filterSelect: {
+    minWidth: 200,
+    padding: "10px 14px",
+    borderRadius: 10,
+    border: "1px solid #d1d5db",
+    fontSize: 14,
+    background: "#fff",
+    outline: "none",
+    cursor: "pointer",
+  },
+  clearBtn: {
+    padding: "10px 16px",
+    borderRadius: 10,
+    border: "1px solid #d1d5db",
+    background: "#f3f4f6",
+    color: "#4b5563",
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: "pointer",
+    transition: "background 0.2s",
   },
 };
