@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "../components/AppShell";
-import { apiGet, rpc, apiPatch } from "../services/api";
+import { apiGet, rpc, apiPatch, limparApontamentosAntigos } from "../services/api";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function MinhasTarefas() {
@@ -22,6 +22,9 @@ export default function MinhasTarefas() {
     setLoading(true);
     setErro("");
     try {
+      // Auto-pausa retroativa para garantir consistência de apontamentos anteriores
+      await limparApontamentosAntigos();
+
       const rows = await apiGet(
         `/rest/v1/controle_api?select=id,tela,nome_tabela,tipo_tabela,nivel_api,peso_api,qtd_campos,tecnico_id,tecnico_nome,status_api,status_teste,status_documentacao,observacoes,modulo,data_inicio,data_fim_real,endpoints` +
           `&tecnico_id=eq.${encodeURIComponent(tecnicoId)}` +
@@ -47,9 +50,25 @@ export default function MinhasTarefas() {
   }, [tecnicoId]);
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
+    const timer = setInterval(() => {
+      const nowTs = Date.now();
+      setNow(nowTs);
+
+      // Verificação em tempo real pós-18:00
+      const current = new Date(nowTs);
+      if (current.getHours() >= 18) {
+        const activeIds = (apontamentos || []).filter(a => !a.fim).map(a => a.controle_api_id);
+        if (activeIds.length > 0) {
+          const tarefasAtivas = tarefas.filter(t => activeIds.includes(t.id) && busyId !== t.id);
+          for (const t of tarefasAtivas) {
+            console.log(`[Auto-Pausa] Horário limite atingido (18:00). Pausando tarefa: ${t.nome_tabela}`);
+            pausar(t);
+          }
+        }
+      }
+    }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [apontamentos, tarefas, busyId]);
 
   const apontAbertos = useMemo(() => {
     return (apontamentos || []).filter(a => !a.fim).map(a => a.controle_api_id);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "../components/AppShell";
-import { apiGet } from "../services/api";
+import { apiGet, limparApontamentosAntigos } from "../services/api";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function Dashboard() {
@@ -34,6 +34,9 @@ const HORAS_POR_DIA = 8;
       try {
         setLoading(true);
         setErro("");
+
+        // Auto-pausa retroativa para manter dados do Dashboard consistentes
+        await limparApontamentosAntigos();
 
         let filtro = "";
         if (!isAdmin) {
