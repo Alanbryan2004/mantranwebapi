@@ -10,6 +10,7 @@ import Finalizadas from "./pages/Finalizadas";
 
 // 👉 NOVA TELA
 import CadastroTelas from "./pages/CadastroTelas";
+import Usuarios from "./pages/Usuarios";
 
 export default function App() {
   return (
@@ -90,6 +91,18 @@ export default function App() {
         element={
           <ProtectedRoute>
             <CadastroTelas />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* =========================
+         Usuários (Admin)
+      ========================= */}
+      <Route
+        path="/usuarios"
+        element={
+          <ProtectedRoute>
+            <Usuarios />
           </ProtectedRoute>
         }
       />

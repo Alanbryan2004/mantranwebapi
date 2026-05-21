@@ -12,8 +12,9 @@ export default function Sidebar() {
         { to: "/minhas-tarefas", label: "Minhas Tarefas" },
         { to: "/finalizadas", label: "Finalizadas" },
 
-        // 👉 NOVO ITEM
+        // 👉 NOVOS ITENS
         { to: "/cadastro-telas", label: "Cadastro de Telas" },
+        { to: "/usuarios", label: "Usuários" },
       ]
       : [
         { to: "/minhas-tarefas", label: "Minhas Tarefas" },
