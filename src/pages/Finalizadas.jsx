@@ -236,18 +236,6 @@ export default function Finalizadas() {
                           ✏️ Editar Endpoints
                         </button>
                       </div>
-
-                      {tb.endpoints && tb.endpoints.length > 0 ? (
-                        <div style={styles.tableEndpointsList}>
-                          {tb.endpoints.map((ep, idx) => (
-                            <span key={idx} style={styles.endpointTag}>
-                              {ep}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <div style={styles.noEndpoints}>Nenhum endpoint cadastrado</div>
-                      )}
                     </li>
                   ))}
                 </ul>
@@ -418,14 +406,13 @@ const styles = {
     background: "#f9fafb",
     border: "1px solid #f3f4f6",
     borderRadius: 10,
-    padding: "12px 14px",
+    padding: "8px 12px",
   },
 
   tableNameRow: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
     flexWrap: "wrap",
     gap: 8,
   },
