@@ -4,6 +4,13 @@ import { apiGet } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
 import { AlertCircle } from "lucide-react";
 
+function formatarHHMM(horasDecimais) {
+    if (!horasDecimais) return "0h 0m";
+    const h = Math.floor(horasDecimais);
+    const m = Math.round((horasDecimais - h) * 60);
+    return `${h}h ${m}m`;
+}
+
 export default function Visualizar() {
     const { user } = useAuth();
     
@@ -79,6 +86,18 @@ export default function Visualizar() {
         ? new Date(Math.max(...listaFiltrada.map(i => new Date(i.termino).getTime())))
         : null;
 
+    let totalCargaHoraria = 0;
+    let totalHorasTrabalhadas = 0;
+
+    listaFiltrada.forEach(item => {
+        const carga = Number(item.carga_horaria) || 0;
+        totalCargaHoraria += carga;
+        const horasTrab = calcularHorasTrabalhadas(item.controle_api_id);
+        totalHorasTrabalhadas += Math.min(horasTrab, carga);
+    });
+
+    const percentualTotal = totalCargaHoraria > 0 ? (totalHorasTrabalhadas / totalCargaHoraria) * 100 : 0;
+
     return (
         <AppShell>
             <div style={{ margin: -16, display: "flex", flexDirection: "column", minHeight: "calc(100vh - 56px)" }}>
@@ -96,6 +115,24 @@ export default function Visualizar() {
                                         {dataFinalProjeto ? dataFinalProjeto.toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : "-"}
                                     </div>
                                 </div>
+
+                                <div style={{ flex: 1, padding: "0 40px", maxWidth: 450 }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                                        <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase" }}>Progresso Geral</span>
+                                        <span style={{ fontSize: 11, color: "#4b5563", fontWeight: 700 }}>
+                                            {formatarHHMM(totalHorasTrabalhadas)} / {totalCargaHoraria}h ({percentualTotal.toFixed(0)}%)
+                                        </span>
+                                    </div>
+                                    <div style={{ width: "100%", height: 8, background: "#e5e7eb", borderRadius: 999, overflow: "hidden" }}>
+                                        <div style={{ 
+                                            height: "100%", 
+                                            background: percentualTotal >= 100 ? "#10b981" : "#3b82f6", 
+                                            width: `${percentualTotal}%`,
+                                            transition: "width 0.5s ease"
+                                        }} />
+                                    </div>
+                                </div>
+
                                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                     <span style={{ fontSize: 12, color: "#374151", fontWeight: 600 }}>Filtrar Técnico:</span>
                                     <select
@@ -166,7 +203,7 @@ export default function Visualizar() {
                                                 <td style={{ ...s.td, textAlign: "center", width: 150 }}>
                                                     <div style={s.progressContainer}>
                                                         <div style={s.progressText}>
-                                                            {horasTrab.toFixed(1)}h / {item.carga_horaria}h ({percent.toFixed(0)}%)
+                                                            {formatarHHMM(horasTrab)} / {item.carga_horaria}h ({percent.toFixed(0)}%)
                                                         </div>
                                                         <div style={s.progressBarBg}>
                                                             <div 
