@@ -8,9 +8,13 @@ import Pendentes from "./pages/Pendentes";
 import HomeRedirect from "./pages/HomeRedirect";
 import Finalizadas from "./pages/Finalizadas";
 
-// 👉 NOVA TELA
+// 👉 TELA DE CADASTROS EXISTENTES
 import CadastroTelas from "./pages/CadastroTelas";
 import Usuarios from "./pages/Usuarios";
+
+// 👉 TELA DE CRONOGRAMA
+import CronogramaIncluir from "./pages/cronograma/Incluir";
+import CronogramaVisualizar from "./pages/cronograma/Visualizar";
 
 export default function App() {
   return (
@@ -103,6 +107,26 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Usuarios />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* =========================
+         Cronograma
+      ========================= */}
+      <Route
+        path="/cronograma/incluir"
+        element={
+          <ProtectedRoute>
+            <CronogramaIncluir />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cronograma/visualizar"
+        element={
+          <ProtectedRoute>
+            <CronogramaVisualizar />
           </ProtectedRoute>
         }
       />
