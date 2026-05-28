@@ -11,7 +11,7 @@ function formatarHHMM(horasDecimais) {
     return `${h}h ${m}m`;
 }
 
-export default function Visualizar() {
+export default function Arquitetura() {
     const { user } = useAuth();
     
     const [lista, setLista] = useState([]);
@@ -30,7 +30,7 @@ export default function Visualizar() {
                 apiGet("/rest/v1/apontamento_tempo?select=controle_api_id,inicio,fim")
             ]);
 
-            const filteredData = (dataCronograma || []).filter(item => item.controle_api?.tipo_tabela !== "Arquitetura");
+            const filteredData = (dataCronograma || []).filter(item => item.controle_api?.tipo_tabela === "Arquitetura");
             setLista(filteredData);
             setTecnicos(dataTecnicos || []);
             setApontamentos(dataApontamentos || []);
@@ -102,7 +102,7 @@ export default function Visualizar() {
     return (
         <AppShell>
             <div style={{ margin: -16, display: "flex", flexDirection: "column", minHeight: "calc(100vh - 56px)" }}>
-                <div style={s.titulo}>VISUALIZAR CRONOGRAMA</div>
+                <div style={s.titulo}>VISUALIZAR ARQUITETURA</div>
 
                 <div style={{ flex: 1, padding: "12px 16px" }}>
                     {loading ? (
@@ -153,7 +153,7 @@ export default function Visualizar() {
                             <table style={s.table}>
                                 <thead>
                                     <tr>
-                                        {["Tela", "Início", "Término", "Técnico", "Progresso"].map((h, i) => (
+                                        {["Tarefa", "Início", "Término", "Técnico", "Progresso"].map((h, i) => (
                                             <th key={h} style={{ ...s.th, textAlign: i === 0 ? "left" : "center" }}>{h}</th>
                                         ))}
                                     </tr>
@@ -168,7 +168,7 @@ export default function Visualizar() {
                                     )}
                                     {listaFiltrada.map((item) => {
                                         const horasTrab = calcularHorasTrabalhadas(item.controle_api_id);
-                                        let percent = (horasTrab / item.carga_horaria) * 100;
+                                        let percent = item.carga_horaria > 0 ? (horasTrab / item.carga_horaria) * 100 : 0;
                                         if (percent > 100) percent = 100;
                                         
                                         const hasAlteration = !!item.justificativa;

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
     XCircle, RotateCcw, PlusCircle, Pencil, Trash2,
-    ChevronLeft, ChevronRight,
+    ChevronLeft, ChevronRight, RefreshCw
 } from "lucide-react";
 import AppShell from "../../components/AppShell";
 import { apiGet, apiPost, apiPatch, apiDelete } from "../../services/api";
@@ -113,6 +113,14 @@ export default function Incluir() {
                 carga_horaria: Number(dados.carga_horaria)
             });
 
+            const tecnicoSelecionado = tecnicos.find(t => t.id === dados.tecnico_id);
+            if (tecnicoSelecionado) {
+                await apiPatch(`/rest/v1/controle_api?id=eq.${dados.controle_api_id}`, {
+                    tecnico_id: tecnicoSelecionado.id,
+                    tecnico_nome: tecnicoSelecionado.nome
+                });
+            }
+
             alert("Cronograma incluído com sucesso!");
             await carregar();
             limpar();
@@ -151,6 +159,14 @@ export default function Incluir() {
 
             await apiPatch(`/rest/v1/cronograma?id=eq.${editId}`, payload);
 
+            const tecnicoSelecionado = tecnicos.find(t => t.id === dados.tecnico_id);
+            if (tecnicoSelecionado) {
+                await apiPatch(`/rest/v1/controle_api?id=eq.${dados.controle_api_id}`, {
+                    tecnico_id: tecnicoSelecionado.id,
+                    tecnico_nome: tecnicoSelecionado.nome
+                });
+            }
+
             alert("Cronograma alterado com sucesso!");
             await carregar();
             limpar();
@@ -170,6 +186,26 @@ export default function Incluir() {
             limpar();
         } catch (e) {
             alert("Erro ao excluir: " + e.message);
+        }
+    };
+
+    const sincronizarTudo = async () => {
+        if (!window.confirm("Isso vai vincular TODAS as tarefas do Cronograma aos respectivos técnicos na tabela principal. Deseja continuar?")) return;
+        
+        try {
+            for (const item of lista) {
+                const tecnicoSelecionado = tecnicos.find(t => t.id === item.tecnico_id);
+                if (tecnicoSelecionado) {
+                    await apiPatch(`/rest/v1/controle_api?id=eq.${item.controle_api_id}`, {
+                        tecnico_id: tecnicoSelecionado.id,
+                        tecnico_nome: tecnicoSelecionado.nome
+                    });
+                }
+            }
+            alert("Sincronização concluída com sucesso! Agora todas as tarefas já vão aparecer para os técnicos.");
+            await carregar();
+        } catch (e) {
+            alert("Erro na sincronização: " + e.message);
         }
     };
 
@@ -367,6 +403,7 @@ export default function Incluir() {
                 <div style={s.rodape}>
                     <BtnRodape icon={<XCircle size={22} />} label="Fechar" onClick={() => navigate(-1)} />
                     <BtnRodape icon={<RotateCcw size={22} />} label="Limpar" onClick={limpar} />
+                    <BtnRodape icon={<RefreshCw size={22} />} label="Sincronizar" onClick={sincronizarTudo} />
                     <BtnRodape icon={<PlusCircle size={22} />} label="Incluir" onClick={incluir} />
                     <BtnRodape icon={<Pencil size={22} />} label="Alterar" onClick={alterar} />
                     <BtnRodape icon={<Trash2 size={22} />} label="Excluir" onClick={excluir} />

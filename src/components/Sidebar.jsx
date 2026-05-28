@@ -17,6 +17,7 @@ export default function Sidebar() {
       submenu: [
         { to: "/cronograma/incluir", label: "Incluir" },
         { to: "/cronograma/visualizar", label: "Visualizar" },
+        { to: "/cronograma/arquitetura", label: "Arquitetura" },
       ]
     },
     { to: "/cadastro-telas", label: "Cadastro de Telas" },
@@ -31,6 +32,7 @@ export default function Sidebar() {
       label: "Cronograma", 
       submenu: [
         { to: "/cronograma/visualizar", label: "Visualizar" },
+        { to: "/cronograma/arquitetura", label: "Arquitetura" },
       ]
     },
   ];

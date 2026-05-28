@@ -55,46 +55,58 @@ export default function CadastroTelas() {
 
     const incluir = async () => {
         if (!dados.nome_tabela.trim()) return alert("Informe a Tela");
-        if (!dados.qtd_campos || Number(dados.qtd_campos) <= 0) return alert("Informe a quantidade de campos");
+        if (!dados.qtd_campos || Number(dados.qtd_campos) < 0) return alert("Informe a quantidade de campos (pode ser 0)");
 
-        await apiPost("/rest/v1/controle_api", {
-            tela: dados.nome_tabela.trim(),
-            nome_tabela: dados.nome_tabela.trim(),
-            tipo_tabela: dados.tipo_tabela,
-            qtd_campos: Number(dados.qtd_campos),
-            modulo: dados.modulo,
-        });
+        try {
+            await apiPost("/rest/v1/controle_api", {
+                tela: dados.nome_tabela.trim(),
+                nome_tabela: dados.nome_tabela.trim(),
+                tipo_tabela: dados.tipo_tabela,
+                qtd_campos: Number(dados.qtd_campos),
+                modulo: dados.modulo,
+            });
 
-        alert("Tela incluída com sucesso");
-        await carregar();
-        limpar();
+            alert("Tela incluída com sucesso");
+            await carregar();
+            limpar();
+        } catch (error) {
+            alert("Erro ao incluir: " + (error.message || String(error)));
+        }
     };
 
     const alterar = async () => {
         if (!editId) return alert("Selecione um registro na tabela");
 
-        await apiPatch(`/rest/v1/controle_api?id=eq.${editId}`, {
-            tela: dados.nome_tabela.trim(),
-            nome_tabela: dados.nome_tabela.trim(),
-            tipo_tabela: dados.tipo_tabela,
-            qtd_campos: Number(dados.qtd_campos),
-            modulo: dados.modulo,
-        });
+        try {
+            await apiPatch(`/rest/v1/controle_api?id=eq.${editId}`, {
+                tela: dados.nome_tabela.trim(),
+                nome_tabela: dados.nome_tabela.trim(),
+                tipo_tabela: dados.tipo_tabela,
+                qtd_campos: Number(dados.qtd_campos),
+                modulo: dados.modulo,
+            });
 
-        alert("Tela alterada com sucesso");
-        await carregar();
-        limpar();
+            alert("Tela alterada com sucesso");
+            await carregar();
+            limpar();
+        } catch (error) {
+            alert("Erro ao alterar: " + (error.message || String(error)));
+        }
     };
 
     const excluir = async () => {
         if (!editId) return alert("Selecione um registro na tabela");
         if (!window.confirm("Confirma exclusão da tela?")) return;
 
-        await apiDelete(`/rest/v1/controle_api?id=eq.${editId}`);
+        try {
+            await apiDelete(`/rest/v1/controle_api?id=eq.${editId}`);
 
-        alert("Tela excluída com sucesso");
-        await carregar();
-        limpar();
+            alert("Tela excluída com sucesso");
+            await carregar();
+            limpar();
+        } catch (error) {
+            alert("Erro ao excluir: " + (error.message || String(error)));
+        }
     };
 
     const selecionar = (item) => {
@@ -134,11 +146,21 @@ export default function CadastroTelas() {
                             <Campo label="Tipo">
                                 <select
                                     value={dados.tipo_tabela}
-                                    onChange={(e) => setDados({ ...dados, tipo_tabela: e.target.value })}
+                                    onChange={(e) => {
+                                        const novoTipo = e.target.value;
+                                        let novoModulo = dados.modulo;
+                                        if (novoTipo === "Arquitetura") {
+                                            novoModulo = "Mantran.API";
+                                        } else if (dados.tipo_tabela === "Arquitetura") {
+                                            novoModulo = "Operacao";
+                                        }
+                                        setDados({ ...dados, tipo_tabela: novoTipo, modulo: novoModulo });
+                                    }}
                                     style={s.input}
                                 >
                                     <option>Cadastro</option>
                                     <option>Documento</option>
+                                    <option>Arquitetura</option>
                                 </select>
                             </Campo>
 
@@ -158,11 +180,22 @@ export default function CadastroTelas() {
                                     onChange={(e) => setDados({ ...dados, modulo: e.target.value })}
                                     style={s.input}
                                 >
-                                    <option>Operacao</option>
-                                    <option>Financeiro</option>
-                                    <option>WMS</option>
-                                    <option>Seguranca</option>
-                                    <option>Oficina</option>
+                                    {dados.tipo_tabela === "Arquitetura" ? (
+                                        <>
+                                            <option>Mantran.API</option>
+                                            <option>Mantran.Web.React</option>
+                                            <option>IA</option>
+                                            <option>Organização</option>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <option>Operacao</option>
+                                            <option>Financeiro</option>
+                                            <option>WMS</option>
+                                            <option>Seguranca</option>
+                                            <option>Oficina</option>
+                                        </>
+                                    )}
                                 </select>
                             </Campo>
                         </div>

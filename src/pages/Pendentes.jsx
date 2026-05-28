@@ -3,7 +3,7 @@ import AppShell from "../components/AppShell";
 import { apiGet, apiPatch } from "../services/api";
 import { useAuth } from "../contexts/AuthContext";
 
-const TIPOS = ["Cadastro", "Documento"];
+const TIPOS = ["Cadastro", "Documento", "Arquitetura"];
 const NIVEIS = ["Facil", "Medio", "Dificil", "Senior"];
 
 export default function Pendentes() {

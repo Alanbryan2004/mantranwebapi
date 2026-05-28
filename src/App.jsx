@@ -15,6 +15,7 @@ import Usuarios from "./pages/Usuarios";
 // 👉 TELA DE CRONOGRAMA
 import CronogramaIncluir from "./pages/cronograma/Incluir";
 import CronogramaVisualizar from "./pages/cronograma/Visualizar";
+import CronogramaArquitetura from "./pages/cronograma/Arquitetura";
 
 export default function App() {
   return (
@@ -127,6 +128,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <CronogramaVisualizar />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cronograma/arquitetura"
+        element={
+          <ProtectedRoute>
+            <CronogramaArquitetura />
           </ProtectedRoute>
         }
       />
