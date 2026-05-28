@@ -192,7 +192,7 @@ export default function MinhasTarefas() {
     }
   }
 
-  async function mudarStatus(tarefa, campo, status) {
+    async function mudarStatus(tarefa, campo, status) {
     setBusyId(tarefa.id);
     try {
       await rpc("atualizar_status", {
@@ -200,6 +200,16 @@ export default function MinhasTarefas() {
         p_campo: campo,
         p_status: status,
       });
+
+      // Auto-finaliza o timer se a tarefa ficou totalmente concluída
+      const novaTarefa = { ...tarefa, [campo]: status };
+      if (isConcluida(novaTarefa)) {
+        await rpc("finalizar_trabalho", {
+          p_controle_api_id: tarefa.id,
+          p_tecnico_id: tecnicoId,
+        });
+      }
+
       await carregar();
     } catch (e) {
       setErro(String(e.message || e));
@@ -430,6 +440,10 @@ function EndpointsEditor({ tarefa, setErro }) {
 }
 
 function isConcluida(t) {
+  if (!t) return false;
+  if (t.tipo_tabela === "Arquitetura") {
+    return t.status_api === "Finalizado";
+  }
   return (
     t.status_api === "Finalizado" &&
     t.status_teste === "Finalizado" &&

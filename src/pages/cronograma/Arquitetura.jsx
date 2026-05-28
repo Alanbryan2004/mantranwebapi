@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import AppShell from "../../components/AppShell";
-import { apiGet } from "../../services/api";
+import { apiGet, rpc } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
 import { AlertCircle } from "lucide-react";
 
@@ -25,15 +25,43 @@ export default function Arquitetura() {
         try {
             setLoading(true);
             const [dataCronograma, dataTecnicos, dataApontamentos] = await Promise.all([
-                apiGet("/rest/v1/cronograma?select=*,controle_api(tela,nome_tabela,tipo_tabela)&order=inicio.asc,termino.asc"),
+                apiGet("/rest/v1/cronograma?select=*,controle_api(tela,nome_tabela,tipo_tabela,status_api,status_teste,status_documentacao)&order=inicio.asc,termino.asc"),
                 apiGet("/rest/v1/usuario?select=id,nome"),
                 apiGet("/rest/v1/apontamento_tempo?select=controle_api_id,inicio,fim")
             ]);
 
             const filteredData = (dataCronograma || []).filter(item => item.controle_api?.tipo_tabela === "Arquitetura");
+            
+            // AUTO-CURA: Se a tarefa está finalizada mas o relógio ficou aberto (aconteceu antes da atualização)
+            const apontamentosAtuais = dataApontamentos || [];
+            let precisaRecarregar = false;
+
+            for (const item of filteredData) {
+                if (item.controle_api?.status_api === "Finalizado") {
+                    const abertos = apontamentosAtuais.filter(a => a.controle_api_id === item.controle_api_id && !a.fim);
+                    if (abertos.length > 0) {
+                        try {
+                            await rpc("finalizar_trabalho", {
+                                p_controle_api_id: item.controle_api_id,
+                                p_tecnico_id: item.tecnico_id
+                            });
+                            precisaRecarregar = true;
+                        } catch (e) {
+                            console.error("Erro ao auto-finalizar", e);
+                        }
+                    }
+                }
+            }
+
+            if (precisaRecarregar) {
+                const novosApontamentos = await apiGet("/rest/v1/apontamento_tempo?select=controle_api_id,inicio,fim");
+                setApontamentos(novosApontamentos || []);
+            } else {
+                setApontamentos(apontamentosAtuais);
+            }
+
             setLista(filteredData);
             setTecnicos(dataTecnicos || []);
-            setApontamentos(dataApontamentos || []);
         } catch (err) {
             console.error("Erro ao carregar dados", err);
         } finally {
@@ -91,10 +119,17 @@ export default function Arquitetura() {
     let totalHorasTrabalhadas = 0;
 
     listaFiltrada.forEach(item => {
-        const carga = Number(item.carga_horaria) || 0;
-        totalCargaHoraria += carga;
+        // Tarefas de Arquitetura só precisam do status_api Finalizado
+        const isFinished = item.controle_api?.status_api === "Finalizado";
+                           
         const horasTrab = calcularHorasTrabalhadas(item.controle_api_id);
-        totalHorasTrabalhadas += Math.min(horasTrab, carga);
+        const cargaOriginal = Number(item.carga_horaria) || 0;
+        
+        // Se finalizou antes (ou depois), a carga real daquela tarefa foi o tempo gasto
+        const cargaConsiderada = isFinished ? horasTrab : cargaOriginal;
+
+        totalCargaHoraria += cargaConsiderada;
+        totalHorasTrabalhadas += Math.min(horasTrab, cargaConsiderada);
     });
 
     const percentualTotal = totalCargaHoraria > 0 ? (totalHorasTrabalhadas / totalCargaHoraria) * 100 : 0;
@@ -121,7 +156,7 @@ export default function Arquitetura() {
                                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                                         <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase" }}>Progresso Geral</span>
                                         <span style={{ fontSize: 11, color: "#4b5563", fontWeight: 700 }}>
-                                            {formatarHHMM(totalHorasTrabalhadas)} / {totalCargaHoraria}h ({percentualTotal.toFixed(0)}%)
+                                            {formatarHHMM(totalHorasTrabalhadas)} / {formatarHHMM(totalCargaHoraria)} ({percentualTotal.toFixed(0)}%)
                                         </span>
                                     </div>
                                     <div style={{ width: "100%", height: 8, background: "#e5e7eb", borderRadius: 999, overflow: "hidden" }}>
@@ -167,8 +202,12 @@ export default function Arquitetura() {
                                         </tr>
                                     )}
                                     {listaFiltrada.map((item) => {
+                                        // Tarefas de Arquitetura só precisam do status_api Finalizado
+                                        const isFinished = item.controle_api?.status_api === "Finalizado";
+
                                         const horasTrab = calcularHorasTrabalhadas(item.controle_api_id);
                                         let percent = item.carga_horaria > 0 ? (horasTrab / item.carga_horaria) * 100 : 0;
+                                        if (isFinished) percent = 100;
                                         if (percent > 100) percent = 100;
                                         
                                         const hasAlteration = !!item.justificativa;
