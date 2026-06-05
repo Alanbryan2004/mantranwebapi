@@ -33,8 +33,7 @@ export default function Pendentes() {
     let q =
       `/rest/v1/controle_api` +
       `?select=id,nome_tabela,tipo_tabela,nivel_api,qtd_campos,modulo,created_at` +
-      `&tecnico_id=is.null` +
-      `&status_api=eq.Pendente`;
+      `&tecnico_id=is.null`;
 
     if (buscaNome) q += `&nome_tabela=ilike.*${buscaNome}*`;
     if (tipo) q += `&tipo_tabela=eq.${tipo}`;

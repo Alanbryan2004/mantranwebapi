@@ -64,6 +64,9 @@ export default function CadastroTelas() {
                 tipo_tabela: dados.tipo_tabela,
                 qtd_campos: Number(dados.qtd_campos),
                 modulo: dados.modulo,
+                status_api: "Pendente",
+                status_teste: "Pendente",
+                status_documentacao: "Pendente",
             });
 
             alert("Tela incluída com sucesso");

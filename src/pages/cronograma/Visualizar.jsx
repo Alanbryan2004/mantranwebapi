@@ -212,8 +212,15 @@ export default function Visualizar() {
 
                                         const horasTrab = calcularHorasTrabalhadas(item.controle_api_id);
                                         let percent = item.carga_horaria > 0 ? (horasTrab / item.carga_horaria) * 100 : 0;
-                                        if (isFinished) percent = 100;
-                                        if (percent > 100) percent = 100;
+                                        
+                                        let barColor = "#3b82f6";
+                                        if (isFinished) {
+                                            barColor = "#10b981"; // Concluído (Verde)
+                                        } else if (percent > 100) {
+                                            barColor = "#ef4444"; // Estourado (Vermelho)
+                                        }
+                                        
+                                        const widthPercent = Math.min(percent, 100);
                                         
                                         const hasAlteration = !!item.justificativa;
 
@@ -254,8 +261,8 @@ export default function Visualizar() {
                                                             <div 
                                                                 style={{ 
                                                                     ...s.progressBarFill, 
-                                                                    width: `${percent}%`,
-                                                                    background: percent >= 100 ? "#10b981" : "#3b82f6" 
+                                                                    width: `${widthPercent}%`,
+                                                                    background: barColor 
                                                                 }} 
                                                             />
                                                         </div>
