@@ -203,6 +203,19 @@ export default function MinhasTarefas() {
 
       // Auto-finaliza o timer se a tarefa ficou totalmente concluída
       const novaTarefa = { ...tarefa, [campo]: status };
+
+      // AUTO-COMPLETAR para tarefas de Arquitetura
+      if (novaTarefa.tipo_tabela === "Arquitetura" && novaTarefa.status_api === "Finalizado") {
+        if (novaTarefa.status_teste !== "Finalizado") {
+          await rpc("atualizar_status", { p_controle_api_id: tarefa.id, p_campo: "status_teste", p_status: "Finalizado" });
+          novaTarefa.status_teste = "Finalizado";
+        }
+        if (novaTarefa.status_documentacao !== "Finalizado") {
+          await rpc("atualizar_status", { p_controle_api_id: tarefa.id, p_campo: "status_documentacao", p_status: "Finalizado" });
+          novaTarefa.status_documentacao = "Finalizado";
+        }
+      }
+
       if (isConcluida(novaTarefa)) {
         await rpc("finalizar_trabalho", {
           p_controle_api_id: tarefa.id,

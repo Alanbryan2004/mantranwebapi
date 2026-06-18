@@ -50,6 +50,26 @@ export default function Arquitetura() {
                             console.error("Erro ao auto-finalizar", e);
                         }
                     }
+
+                    // AUTO-CURA: Garantir que Teste e Documentação estejam como Finalizado para contar no Dashboard
+                    if (item.controle_api?.status_teste !== "Finalizado" || item.controle_api?.status_documentacao !== "Finalizado") {
+                        try {
+                            if (item.controle_api?.status_teste !== "Finalizado") {
+                                await rpc("atualizar_status", { p_controle_api_id: item.controle_api_id, p_campo: "status_teste", p_status: "Finalizado" });
+                            }
+                            if (item.controle_api?.status_documentacao !== "Finalizado") {
+                                await rpc("atualizar_status", { p_controle_api_id: item.controle_api_id, p_campo: "status_documentacao", p_status: "Finalizado" });
+                            }
+                            // Chama finalizar novamente para garantir data_fim_real preenchida se o backend depender dos três status
+                            await rpc("finalizar_trabalho", {
+                                p_controle_api_id: item.controle_api_id,
+                                p_tecnico_id: item.tecnico_id
+                            });
+                            precisaRecarregar = true;
+                        } catch(e) {
+                            console.error("Erro na auto-cura de status Arquitetura", e);
+                        }
+                    }
                 }
             }
 
@@ -107,9 +127,33 @@ export default function Arquitetura() {
         setTooltipContent(null);
     };
 
-    const listaFiltrada = filtroTecnico 
+    const listaFiltrada = (filtroTecnico 
         ? lista.filter(item => item.tecnico_id === filtroTecnico)
-        : lista;
+        : [...lista]
+    ).sort((a, b) => {
+        const isFinishedA = a.controle_api?.status_api === "Finalizado";
+        const isFinishedB = b.controle_api?.status_api === "Finalizado";
+
+        if (isFinishedA && !isFinishedB) return -1;
+        if (!isFinishedA && isFinishedB) return 1;
+
+        // Se não estão finalizados, verificamos se estão em andamento
+        const horasA = calcularHorasTrabalhadas(a.controle_api_id);
+        const horasB = calcularHorasTrabalhadas(b.controle_api_id);
+
+        const emAndamentoA = a.controle_api?.status_api === "Trabalhando" || horasA > 0;
+        const emAndamentoB = b.controle_api?.status_api === "Trabalhando" || horasB > 0;
+
+        if (emAndamentoA && !emAndamentoB) return -1;
+        if (!emAndamentoA && emAndamentoB) return 1;
+        
+        // Se ambos estão em andamento, desempata colocando quem tem MAIS horas primeiro
+        if (emAndamentoA && emAndamentoB && horasA !== horasB) {
+            return horasB - horasA;
+        }
+
+        return new Date(a.inicio).getTime() - new Date(b.inicio).getTime();
+    });
 
     const dataFinalProjeto = listaFiltrada.length > 0 
         ? new Date(Math.max(...listaFiltrada.map(i => new Date(i.termino).getTime())))
@@ -215,7 +259,8 @@ export default function Arquitetura() {
                                             barColor = "#ef4444"; // Estourado (Vermelho)
                                         }
                                         
-                                        const widthPercent = Math.min(percent, 100);
+                                        const widthPercent = isFinished ? 100 : Math.min(percent, 100);
+                                        const displayPercent = isFinished ? 100 : percent;
                                         
                                         const hasAlteration = !!item.justificativa;
 
@@ -250,7 +295,7 @@ export default function Arquitetura() {
                                                 <td style={{ ...s.td, textAlign: "center", width: 150 }}>
                                                     <div style={s.progressContainer}>
                                                         <div style={s.progressText}>
-                                                            {formatarHHMM(horasTrab)} / {item.carga_horaria}h ({percent.toFixed(0)}%)
+                                                            {formatarHHMM(horasTrab)} / {item.carga_horaria}h ({displayPercent.toFixed(0)}%)
                                                         </div>
                                                         <div style={s.progressBarBg}>
                                                             <div 
