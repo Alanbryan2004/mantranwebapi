@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
     XCircle, RotateCcw, PlusCircle, Pencil, Trash2,
@@ -29,11 +29,13 @@ export default function Usuarios() {
     const [lista, setLista] = useState([]);
     const [editId, setEditId] = useState(null);
     const [pagina, setPagina] = useState(1);
+    const [hasColETecnico, setHasColETecnico] = useState(false);
     const [dados, setDados] = useState({
         nome: "",
         login: "",
         senha: "",
         perfil: "Tecnico",
+        e_tecnico: true,
         meta_semanal: "1",
         ativo: true,
     });
@@ -48,9 +50,19 @@ export default function Usuarios() {
     async function carregar() {
         try {
             // Busca todos os usuários
-            const users = await apiGet(
-                "/rest/v1/usuario?select=id,nome,login,senha,perfil,ativo,meta_semanal&order=nome.asc"
-            );
+            let users = [];
+            let temCol = true;
+            try {
+                users = await apiGet(
+                    "/rest/v1/usuario?select=id,nome,login,senha,perfil,e_tecnico,ativo,meta_semanal&order=nome.asc"
+                );
+            } catch {
+                temCol = false;
+                users = await apiGet(
+                    "/rest/v1/usuario?select=id,nome,login,senha,perfil,ativo,meta_semanal&order=nome.asc"
+                );
+            }
+            setHasColETecnico(temCol);
 
             // Busca as metas da tabela meta_tecnico para garantir consistência real
             let metas = [];
@@ -60,11 +72,15 @@ export default function Usuarios() {
                 console.log("meta_tecnico não encontrada ou vazia", e);
             }
 
-            // Combina usuários com metas individuais
+            // Combina usuários com metas individuais e status de técnico
             const combinada = (users || []).map(u => {
                 const m = metas && metas.find(x => x.tecnico_id === u.id);
+                const isTecnico = typeof u.e_tecnico === "boolean"
+                    ? u.e_tecnico
+                    : (u.perfil === "Tecnico" || ["alan", "gabriel", "daniel", "guilherme"].includes((u.login || "").toLowerCase()));
                 return {
                     ...u,
+                    e_tecnico: isTecnico,
                     meta_exibida: m ? m.meta_semanal : (u.meta_semanal !== undefined ? u.meta_semanal : 1)
                 };
             });
@@ -86,6 +102,13 @@ export default function Usuarios() {
         return null;
     }
 
+    const perfisDisponiveis = useMemo(() => {
+        const defaultPerfis = ["Administrador", "Parceiro", "Suporte", "Tecnico", "Usuario"];
+        const perfisDb = (lista || []).map(u => u.perfil).filter(Boolean);
+        const unicos = Array.from(new Set([...defaultPerfis, ...perfisDb]));
+        return unicos.sort((a, b) => a.localeCompare(b));
+    }, [lista]);
+
     const totalPaginas = Math.max(1, Math.ceil(lista.length / PAGE_SIZE));
     const inicio = (pagina - 1) * PAGE_SIZE;
     const listaExibida = lista.slice(inicio, inicio + PAGE_SIZE);
@@ -96,6 +119,7 @@ export default function Usuarios() {
             login: "",
             senha: "",
             perfil: "Tecnico",
+            e_tecnico: true,
             meta_semanal: "1",
             ativo: true,
         });
@@ -118,14 +142,19 @@ export default function Usuarios() {
             }
 
             // 1. Salvar na tabela de usuario
-            await apiPost("/rest/v1/usuario", {
+            const payload = {
                 nome: dados.nome.trim(),
                 login: dados.login.trim(),
                 senha: dados.senha.trim(),
                 perfil: dados.perfil,
                 meta_semanal: Number(dados.meta_semanal),
                 ativo: dados.ativo,
-            });
+            };
+            if (hasColETecnico) {
+                payload.e_tecnico = dados.e_tecnico;
+            }
+
+            await apiPost("/rest/v1/usuario", payload);
 
             // 2. Buscar o ID do usuário gerado
             const rows = await apiGet(`/rest/v1/usuario?login=eq.${encodeURIComponent(dados.login.trim())}`);
@@ -164,14 +193,19 @@ export default function Usuarios() {
             }
 
             // 1. Atualizar tabela usuario
-            await apiPatch(`/rest/v1/usuario?id=eq.${editId}`, {
+            const payload = {
                 nome: dados.nome.trim(),
                 login: dados.login.trim(),
                 senha: dados.senha.trim(),
                 perfil: dados.perfil,
                 meta_semanal: Number(dados.meta_semanal),
                 ativo: dados.ativo,
-            });
+            };
+            if (hasColETecnico) {
+                payload.e_tecnico = dados.e_tecnico;
+            }
+
+            await apiPatch(`/rest/v1/usuario?id=eq.${editId}`, payload);
 
             // 2. Upsert na tabela meta_tecnico
             const existingMeta = await apiGet(`/rest/v1/meta_tecnico?tecnico_id=eq.${editId}`);
@@ -224,6 +258,7 @@ export default function Usuarios() {
             login: item.login,
             senha: item.senha || "",
             perfil: item.perfil,
+            e_tecnico: typeof item.e_tecnico === "boolean" ? item.e_tecnico : item.perfil === "Tecnico",
             meta_semanal: String(item.meta_exibida),
             ativo: item.ativo,
         });
@@ -276,11 +311,32 @@ export default function Usuarios() {
                             <Campo label="Perfil">
                                 <select
                                     value={dados.perfil}
-                                    onChange={(e) => setDados({ ...dados, perfil: e.target.value })}
+                                    onChange={(e) => {
+                                        const novoPerfil = e.target.value;
+                                        setDados({ 
+                                            ...dados, 
+                                            perfil: novoPerfil,
+                                            e_tecnico: novoPerfil === "Tecnico" ? true : dados.e_tecnico
+                                        });
+                                    }}
                                     style={s.input}
                                 >
-                                    <option value="Tecnico">Técnico</option>
-                                    <option value="Administrador">Administrador</option>
+                                    {perfisDisponiveis.map(p => (
+                                        <option key={p} value={p}>
+                                            {p === "Tecnico" ? "Técnico" : p}
+                                        </option>
+                                    ))}
+                                </select>
+                            </Campo>
+
+                            <Campo label="Atua como Técnico?">
+                                <select
+                                    value={dados.e_tecnico ? "Sim" : "Não"}
+                                    onChange={(e) => setDados({ ...dados, e_tecnico: e.target.value === "Sim" })}
+                                    style={s.input}
+                                >
+                                    <option value="Sim">Sim</option>
+                                    <option value="Não">Não</option>
                                 </select>
                             </Campo>
 
@@ -314,7 +370,7 @@ export default function Usuarios() {
                         <table style={s.table}>
                             <thead>
                                 <tr>
-                                    {["Nome", "Login", "Perfil", "Meta Semanal (Telas)", "Status"].map((h, i) => (
+                                    {["Nome", "Login", "Perfil", "Técnico?", "Meta Semanal (Telas)", "Status"].map((h, i) => (
                                         <th key={h} style={{ ...s.th, textAlign: i === 0 ? "left" : "center" }}>{h}</th>
                                     ))}
                                 </tr>
@@ -322,7 +378,7 @@ export default function Usuarios() {
                             <tbody>
                                 {listaExibida.length === 0 && (
                                     <tr>
-                                        <td colSpan={5} style={{ ...s.td, textAlign: "center", color: "#9ca3af", padding: 16 }}>
+                                        <td colSpan={6} style={{ ...s.td, textAlign: "center", color: "#9ca3af", padding: 16 }}>
                                             Nenhum usuário cadastrado encontrado
                                         </td>
                                     </tr>
@@ -332,16 +388,19 @@ export default function Usuarios() {
                                         key={item.id}
                                         onClick={() => selecionar(item)}
                                         style={{
-                                            cursor: "pointer",
-                                            background: editId === item.id ? "#fefce8" : "#fff",
+                                             cursor: "pointer",
+                                             background: editId === item.id ? "#fefce8" : "#fff",
                                         }}
                                         onMouseEnter={e => e.currentTarget.style.background = editId === item.id ? "#fef9c3" : "#fff1f2"}
                                         onMouseLeave={e => e.currentTarget.style.background = editId === item.id ? "#fefce8" : "#fff"}
                                     >
                                         <td style={{ ...s.td, color: "#1d4ed8", fontWeight: 600 }}>{item.nome}</td>
                                         <td style={{ ...s.td, textAlign: "center", color: "#374151" }}>{item.login}</td>
-                                        <td style={{ ...s.td, textAlign: "center", color: "#10b981", fontWeight: 600 }}>
-                                            {item.perfil === "Tecnico" ? "👤 Técnico" : "👑 Administrador"}
+                                        <td style={{ ...s.td, textAlign: "center", color: item.perfil === "Administrador" ? "#d97706" : item.perfil === "Tecnico" ? "#10b981" : "#6366f1", fontWeight: 600 }}>
+                                            {item.perfil === "Tecnico" ? "👤 Técnico" : item.perfil === "Administrador" ? "👑 Administrador" : item.perfil}
+                                        </td>
+                                        <td style={{ ...s.td, textAlign: "center", fontWeight: 600, color: item.e_tecnico ? "#059669" : "#dc2626" }}>
+                                            {item.e_tecnico ? "✅ Sim" : "❌ Não"}
                                         </td>
                                         <td style={{ ...s.td, textAlign: "center", color: "#4f46e5", fontWeight: 700 }}>
                                             {item.meta_exibida}

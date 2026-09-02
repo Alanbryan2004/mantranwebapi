@@ -29,6 +29,7 @@ export default function Incluir() {
     const [lista, setLista] = useState([]);
     const [telas, setTelas] = useState([]);
     const [tecnicos, setTecnicos] = useState([]);
+    const [todosUsuarios, setTodosUsuarios] = useState([]);
     
     const [editId, setEditId] = useState(null);
     const [pagina, setPagina] = useState(1);
@@ -53,15 +54,34 @@ export default function Incluir() {
 
     async function carregar() {
         try {
-            const [dataCronograma, dataTelas, dataTecnicos] = await Promise.all([
+            let dataTecnicos = [];
+            try {
+                dataTecnicos = await apiGet("/rest/v1/usuario?select=id,nome,login,perfil,e_tecnico,ativo&ativo=eq.true&order=nome.asc");
+            } catch {
+                dataTecnicos = await apiGet("/rest/v1/usuario?select=id,nome,login,perfil,ativo&ativo=eq.true&order=nome.asc");
+            }
+
+            const [dataCronograma, dataTelas] = await Promise.all([
                 apiGet("/rest/v1/cronograma?select=*,controle_api(tela,nome_tabela)&order=inicio.asc,termino.asc"),
-                apiGet("/rest/v1/controle_api?select=id,tela,nome_tabela&order=nome_tabela.asc"),
-                apiGet("/rest/v1/usuario?select=id,nome&ativo=eq.true&order=nome.asc")
+                apiGet("/rest/v1/controle_api?select=id,tela,nome_tabela&order=nome_tabela.asc")
             ]);
+
+            // Filtra apenas usuários que atuam como Técnico
+            const apenasTecnicos = (dataTecnicos || []).filter(u => {
+                if (typeof u.e_tecnico === "boolean") {
+                    return u.e_tecnico;
+                }
+                if (u.perfil === "Tecnico") return true;
+                if (u.perfil === "Administrador" && ["alan", "gabriel", "daniel", "guilherme"].includes((u.login || "").toLowerCase())) {
+                    return true;
+                }
+                return false;
+            });
 
             setLista(dataCronograma || []);
             setTelas(dataTelas || []);
-            setTecnicos(dataTecnicos || []);
+            setTecnicos(apenasTecnicos);
+            setTodosUsuarios(dataTecnicos || []);
         } catch (err) {
             console.error("Erro ao carregar dados", err);
             alert("Erro ao carregar os dados. Verifique a tabela cronograma no banco de dados.");
@@ -223,7 +243,7 @@ export default function Incluir() {
     };
 
     const getNomeTecnico = (id) => {
-        const tec = tecnicos.find(t => t.id === id);
+        const tec = (todosUsuarios || []).find(t => t.id === id) || tecnicos.find(t => t.id === id);
         return tec ? tec.nome : "Desconhecido";
     };
 
@@ -262,6 +282,9 @@ export default function Incluir() {
                                     style={s.input}
                                 >
                                     <option value="">-- Selecione o Técnico --</option>
+                                    {dados.tecnico_id && !tecnicos.some(t => t.id === dados.tecnico_id) && (
+                                        <option value={dados.tecnico_id}>{getNomeTecnico(dados.tecnico_id)}</option>
+                                    )}
                                     {tecnicos.map(t => (
                                         <option key={t.id} value={t.id}>{t.nome}</option>
                                     ))}

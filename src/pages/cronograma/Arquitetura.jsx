@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import AppShell from "../../components/AppShell";
 import { apiGet, rpc } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
@@ -16,6 +16,7 @@ export default function Arquitetura() {
     
     const [lista, setLista] = useState([]);
     const [tecnicos, setTecnicos] = useState([]);
+    const [todosUsuarios, setTodosUsuarios] = useState([]);
     const [apontamentos, setApontamentos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [tooltipContent, setTooltipContent] = useState(null);
@@ -24,9 +25,15 @@ export default function Arquitetura() {
     async function carregar() {
         try {
             setLoading(true);
-            const [dataCronograma, dataTecnicos, dataApontamentos] = await Promise.all([
+            let dataTecnicos = [];
+            try {
+                dataTecnicos = await apiGet("/rest/v1/usuario?select=id,nome,login,perfil,e_tecnico,ativo&ativo=eq.true&order=nome.asc");
+            } catch {
+                dataTecnicos = await apiGet("/rest/v1/usuario?select=id,nome,login,perfil,ativo&ativo=eq.true&order=nome.asc");
+            }
+
+            const [dataCronograma, dataApontamentos] = await Promise.all([
                 apiGet("/rest/v1/cronograma?select=*,controle_api(tela,nome_tabela,tipo_tabela,status_api,status_teste,status_documentacao)&order=inicio.asc,termino.asc"),
-                apiGet("/rest/v1/usuario?select=id,nome"),
                 apiGet("/rest/v1/apontamento_tempo?select=controle_api_id,inicio,fim")
             ]);
 
@@ -80,8 +87,21 @@ export default function Arquitetura() {
                 setApontamentos(apontamentosAtuais);
             }
 
+            // Filtra apenas usuários que atuam como Técnico
+            const apenasTecnicos = (dataTecnicos || []).filter((u) => {
+                if (typeof u.e_tecnico === "boolean") {
+                    return u.e_tecnico;
+                }
+                if (u.perfil === "Tecnico") return true;
+                if (u.perfil === "Administrador" && ["alan", "gabriel", "daniel", "guilherme"].includes((u.login || "").toLowerCase())) {
+                    return true;
+                }
+                return false;
+            });
+
             setLista(filteredData);
-            setTecnicos(dataTecnicos || []);
+            setTecnicos(apenasTecnicos);
+            setTodosUsuarios(dataTecnicos || []);
         } catch (err) {
             console.error("Erro ao carregar dados", err);
         } finally {
@@ -94,7 +114,7 @@ export default function Arquitetura() {
     }, [user]);
 
     const getNomeTecnico = (id) => {
-        const tec = tecnicos.find(t => t.id === id);
+        const tec = (todosUsuarios || []).find(t => t.id === id) || tecnicos.find(t => t.id === id);
         return tec ? tec.nome : "Desconhecido";
     };
 

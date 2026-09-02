@@ -21,7 +21,14 @@ export default function Finalizadas() {
       setErro("");
       setLoading(true);
 
-      const [tarefas, horas, listaUsuarios] = await Promise.all([
+      let listaUsuarios = [];
+      try {
+        listaUsuarios = await apiGet("/rest/v1/usuario?select=id,nome,login,perfil,e_tecnico,ativo&ativo=eq.true&order=nome.asc");
+      } catch {
+        listaUsuarios = await apiGet("/rest/v1/usuario?select=id,nome,login,perfil,ativo&ativo=eq.true&order=nome.asc");
+      }
+
+      const [tarefas, horas] = await Promise.all([
         apiGet(
           `/rest/v1/controle_api` +
             `?select=id,tela,nome_tabela,tecnico_nome,endpoints` +
@@ -34,10 +41,20 @@ export default function Finalizadas() {
             `?select=controle_api_id,inicio,fim` +
             `&fim=not.is.null`
         ),
-        apiGet(`/rest/v1/usuario?select=id,nome&order=nome.asc`).catch(() => [])
       ]);
 
-      setUsuarios(listaUsuarios || []);
+      const apenasTecnicos = (listaUsuarios || []).filter((u) => {
+        if (typeof u.e_tecnico === "boolean") {
+          return u.e_tecnico;
+        }
+        if (u.perfil === "Tecnico") return true;
+        if (u.perfil === "Administrador" && ["alan", "gabriel", "daniel", "guilherme"].includes((u.login || "").toLowerCase())) {
+          return true;
+        }
+        return false;
+      });
+
+      setUsuarios(apenasTecnicos);
 
       const mapa = {};
 

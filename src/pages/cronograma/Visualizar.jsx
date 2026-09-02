@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import AppShell from "../../components/AppShell";
 import { apiGet, rpc } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
@@ -166,6 +166,11 @@ export default function Visualizar() {
 
     const percentualTotal = totalCargaHoraria > 0 ? (totalHorasTrabalhadas / totalCargaHoraria) * 100 : 0;
 
+    const tecnicosFiltro = useMemo(() => {
+        const idsPresentes = new Set(lista.map(item => item.tecnico_id).filter(Boolean));
+        return tecnicos.filter(t => idsPresentes.has(t.id));
+    }, [lista, tecnicos]);
+
     return (
         <AppShell>
             <div style={{ margin: -16, display: "flex", flexDirection: "column", minHeight: "calc(100vh - 56px)" }}>
@@ -209,7 +214,7 @@ export default function Visualizar() {
                                         style={{ border: "1px solid #d1d5db", borderRadius: 4, padding: "6px 8px", fontSize: 12, outline: "none", width: 200 }}
                                     >
                                         <option value="">-- Todos --</option>
-                                        {tecnicos.map(t => (
+                                        {tecnicosFiltro.map(t => (
                                             <option key={t.id} value={t.id}>{t.nome}</option>
                                         ))}
                                     </select>
