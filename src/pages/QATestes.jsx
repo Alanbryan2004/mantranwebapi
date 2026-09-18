@@ -19,8 +19,49 @@ import {
   ChevronUp,
   MessageSquare,
   Copy,
-  Check
+  Check,
+  Camera,
+  Image as ImageIcon,
+  Maximize2,
+  X
 } from "lucide-react";
+
+// Função para processar e comprimir imagem do print
+function processarImagem(file, callback) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new window.Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      let width = img.width;
+      let height = img.height;
+      const MAX_WIDTH = 1200;
+      const MAX_HEIGHT = 1200;
+
+      if (width > height) {
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+      } else {
+        if (height > MAX_HEIGHT) {
+          width = Math.round((width * MAX_HEIGHT) / height);
+          height = MAX_HEIGHT;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+      callback(dataUrl);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
 
 export default function QATestes() {
   const { user } = useAuth();
@@ -48,9 +89,13 @@ export default function QATestes() {
   const [salvandoCenario, setSalvandoCenario] = useState(false);
 
   // Modal de Registro de Erro pelo QA
-  const [modalErro, setModalErro] = useState(null); // { cenario, erroTexto }
+  const [modalErro, setModalErro] = useState(null); // { cenario, erroTexto, imagem }
   const [textoErro, setTextoErro] = useState("");
+  const [imagemErro, setImagemErro] = useState(null);
   const [salvandoErro, setSalvandoErro] = useState(false);
+
+  // Modal de Visualização de Imagem em Tamanho Real (Lightbox)
+  const [modalZoomImagem, setModalZoomImagem] = useState(null);
 
   async function carregar() {
     try {
@@ -243,8 +288,9 @@ export default function QATestes() {
 
   async function mudarStatusCenario(cenario, novoStatus) {
     if (novoStatus === "ERRO") {
-      setModalErro({ cenario, erroTexto: cenario.observacao_erro || "" });
+      setModalErro({ cenario, erroTexto: cenario.observacao_erro || "", imagem: cenario.evidencia_imagem || null });
       setTextoErro(cenario.observacao_erro || "");
+      setImagemErro(cenario.evidencia_imagem || null);
       return;
     }
 
@@ -272,11 +318,13 @@ export default function QATestes() {
       await apiPatch(`/rest/v1/qa_cenarios?id=eq.${modalErro.cenario.id}`, {
         status: "ERRO",
         observacao_erro: textoErro.trim(),
+        evidencia_imagem: imagemErro || null,
         qa_id: user?.id || null,
         qa_nome: user?.nome || user?.login || "QA",
         updated_at: new Date().toISOString()
       });
       setModalErro(null);
+      setImagemErro(null);
       await carregar();
     } catch (e) {
       alert("Erro ao registrar erro: " + (e.message || String(e)));
@@ -578,6 +626,30 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
                                               <AlertTriangle size={14} /> Detalhe do Erro Apontado pelo QA ({c.qa_nome || "QA"}):
                                             </div>
                                             <div style={styles.erroBoxContent}>{c.observacao_erro}</div>
+
+                                            {/* PRINT ANEXADO */}
+                                            {c.evidencia_imagem && (
+                                              <div style={styles.printPreviewWrap}>
+                                                <div style={styles.printHeader}>
+                                                  <Camera size={13} color="#b91c1c" />
+                                                  <span style={{ fontSize: 11, fontWeight: 700, color: "#991b1b" }}>Print / Evidência do Erro:</span>
+                                                  <button
+                                                    type="button"
+                                                    style={styles.btnVerPrint}
+                                                    onClick={() => setModalZoomImagem(c.evidencia_imagem)}
+                                                  >
+                                                    <Maximize2 size={12} /> Ampliar Print
+                                                  </button>
+                                                </div>
+                                                <img
+                                                  src={c.evidencia_imagem}
+                                                  alt="Evidência do Erro"
+                                                  style={styles.printThumb}
+                                                  onClick={() => setModalZoomImagem(c.evidencia_imagem)}
+                                                  title="Clique para visualizar em tamanho real"
+                                                />
+                                              </div>
+                                            )}
                                           </div>
                                         )}
 
@@ -730,7 +802,7 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
         {/* MODAL REGISTRAR ERRO PELO QA */}
         {modalErro && (
           <div style={styles.modalOverlay}>
-            <div style={{ ...styles.modalCard, maxWidth: 520 }}>
+            <div style={{ ...styles.modalCard, maxWidth: 560 }}>
               <div style={{ ...styles.modalHeader, borderBottomColor: "#fee2e2" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#dc2626" }}>
                   <AlertTriangle size={20} />
@@ -757,19 +829,93 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
                   </label>
                   <textarea
                     style={{ ...styles.textareaModal, borderColor: "#fca5a5" }}
-                    placeholder="Ex: Ao clicar no botão Salvar com os campos obrigatórios preenchidos, a requisição retornou status 500 no endpoint /rest/v1/cliente e não gravou o registro."
+                    placeholder="Ex: Ao clicar no botão Salvar com os campos obrigatórios preenchidos, a requisição retornou status 500 no endpoint /rest/v1/cliente e não gravou o registro. Dica: você pode colar um print aqui direto usando Ctrl+V!"
                     value={textoErro}
                     onChange={(e) => setTextoErro(e.target.value)}
-                    rows={5}
+                    onPaste={(e) => {
+                      const items = (e.clipboardData || window.clipboardData)?.items;
+                      if (items) {
+                        for (let item of items) {
+                          if (item.type.indexOf("image") === 0) {
+                            const file = item.getAsFile();
+                            processarImagem(file, (dataUrl) => {
+                              setImagemErro(dataUrl);
+                            });
+                            break;
+                          }
+                        }
+                      }
+                    }}
+                    rows={4}
                     autoFocus
                   />
+                </div>
+
+                {/* ANEXO DE PRINT DO ERRO */}
+                <div style={styles.fieldGroup}>
+                  <label style={styles.label}>
+                    📸 Print / Evidência Visual do Erro (Opcional)
+                  </label>
+                  
+                  {imagemErro ? (
+                    <div style={styles.imageUploadedCard}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <img
+                          src={imagemErro}
+                          alt="Print do Erro"
+                          style={styles.imageUploadedThumb}
+                          onClick={() => setModalZoomImagem(imagemErro)}
+                          title="Clique para ampliar"
+                        />
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#16a34a" }}>
+                            ✅ Print anexado com sucesso!
+                          </div>
+                          <div style={{ fontSize: 11, color: "#6b7280" }}>
+                            O técnico poderá ver este print em Minhas Tarefas.
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        style={styles.btnRemoveImg}
+                        onClick={() => setImagemErro(null)}
+                      >
+                        <X size={14} /> Remover Print
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={styles.uploadArea}>
+                      <input
+                        type="file"
+                        id="file-print-qa"
+                        accept="image/*"
+                        style={{ display: "none" }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            processarImagem(file, (dataUrl) => {
+                              setImagemErro(dataUrl);
+                            });
+                          }
+                        }}
+                      />
+                      <label htmlFor="file-print-qa" style={styles.uploadBtnLabel}>
+                        <Camera size={18} color="#b91c1c" />
+                        <span>Clique para <strong>selecionar uma imagem</strong> ou cole com <strong>Ctrl+V</strong></span>
+                      </label>
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div style={styles.modalFooter}>
                 <button
                   style={styles.btnModalCancel}
-                  onClick={() => setModalErro(null)}
+                  onClick={() => {
+                    setModalErro(null);
+                    setImagemErro(null);
+                  }}
                   disabled={salvandoErro}
                 >
                   Cancelar
@@ -781,6 +927,25 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
                 >
                   {salvandoErro ? "Salvando..." : "Confirmar e Reprovar Tela"}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL DE LIGHTBOX / ZOOM DE IMAGEM */}
+        {modalZoomImagem && (
+          <div style={styles.lightboxOverlay} onClick={() => setModalZoomImagem(null)}>
+            <div style={styles.lightboxContent} onClick={(e) => e.stopPropagation()}>
+              <div style={styles.lightboxHeader}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", gap: 6 }}>
+                  <ImageIcon size={16} /> Print / Evidência do Erro
+                </span>
+                <button style={styles.btnLightboxClose} onClick={() => setModalZoomImagem(null)}>
+                  <X size={20} color="#fff" />
+                </button>
+              </div>
+              <div style={styles.lightboxImgWrap}>
+                <img src={modalZoomImagem} alt="Print Ampliado" style={styles.lightboxImage} />
               </div>
             </div>
           </div>
@@ -1283,5 +1448,148 @@ const styles = {
     fontSize: 13,
     fontWeight: 700,
     cursor: "pointer"
+  },
+
+  /* ESTILOS DE PRINT / EVIDÊNCIA */
+  printPreviewWrap: {
+    marginTop: 8,
+    padding: "8px 10px",
+    background: "#fff",
+    border: "1px solid #fecaca",
+    borderRadius: 8,
+    display: "flex",
+    flexDirection: "column",
+    gap: 6
+  },
+  printHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6
+  },
+  btnVerPrint: {
+    background: "#fef2f2",
+    border: "1px solid #fca5a5",
+    color: "#b91c1c",
+    borderRadius: 6,
+    padding: "3px 8px",
+    fontSize: 11,
+    fontWeight: 700,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: 4
+  },
+  printThumb: {
+    maxHeight: 140,
+    maxWidth: 240,
+    objectFit: "contain",
+    borderRadius: 6,
+    border: "1px solid #e2e8f0",
+    cursor: "pointer",
+    transition: "transform 0.2s",
+    background: "#f8fafc"
+  },
+  imageUploadedCard: {
+    padding: "8px 12px",
+    background: "#f0fdf4",
+    border: "1px solid #bbf7d0",
+    borderRadius: 8,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  imageUploadedThumb: {
+    width: 48,
+    height: 48,
+    objectFit: "cover",
+    borderRadius: 6,
+    border: "1px solid #86efac",
+    cursor: "pointer"
+  },
+  btnRemoveImg: {
+    background: "#fee2e2",
+    border: "1px solid #fca5a5",
+    color: "#dc2626",
+    borderRadius: 6,
+    padding: "4px 8px",
+    fontSize: 11,
+    fontWeight: 700,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: 4
+  },
+  uploadArea: {
+    border: "2px dashed #cbd5e1",
+    borderRadius: 8,
+    padding: "12px",
+    textAlign: "center",
+    background: "#f8fafc",
+    cursor: "pointer",
+    transition: "all 0.2s"
+  },
+  uploadBtnLabel: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    color: "#475569",
+    fontSize: 12,
+    cursor: "pointer"
+  },
+  lightboxOverlay: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: "rgba(15, 23, 42, 0.85)",
+    backdropFilter: "blur(6px)",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10000,
+    padding: 20
+  },
+  lightboxContent: {
+    maxWidth: "90vw",
+    maxHeight: "90vh",
+    display: "flex",
+    flexDirection: "column",
+    gap: 10
+  },
+  lightboxHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  btnLightboxClose: {
+    background: "rgba(255, 255, 255, 0.2)",
+    border: "none",
+    borderRadius: "50%",
+    width: 32,
+    height: 32,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer"
+  },
+  lightboxImgWrap: {
+    overflow: "auto",
+    maxHeight: "82vh",
+    borderRadius: 8,
+    border: "1px solid rgba(255, 255, 255, 0.2)",
+    background: "#0f172a",
+    display: "flex",
+    justifyContent: "center"
+  },
+  lightboxImage: {
+    maxWidth: "100%",
+    maxHeight: "80vh",
+    objectFit: "contain",
+    borderRadius: 6
   }
 };

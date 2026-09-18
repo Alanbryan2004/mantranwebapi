@@ -18,6 +18,7 @@ export default function MinhasTarefas() {
   const [modalQa, setModalQa] = useState(null); // { tela, tarefa, cenariosErro }
   const [notaCorrecao, setNotaCorrecao] = useState("");
   const [salvandoCorrecao, setSalvandoCorrecao] = useState(false);
+  const [zoomImagem, setZoomImagem] = useState(null);
 
   const tecnicoId = user?.id;
   const tecnicoNome = user?.nome;
@@ -533,6 +534,29 @@ export default function MinhasTarefas() {
                       <div style={{ marginTop: 4, color: "#7f1d1d", whiteSpace: "pre-wrap" }}>
                         {c.observacao_erro || "Nenhum detalhe adicional informado."}
                       </div>
+
+                      {/* PRINT ANEXADO PELO QA */}
+                      {c.evidencia_imagem && (
+                        <div style={styles.printContainerTech}>
+                          <div style={styles.printHeaderTech}>
+                            <span>📸 <strong>Print / Evidência Anexada pelo QA:</strong></span>
+                            <button
+                              type="button"
+                              style={styles.btnZoomPrintTech}
+                              onClick={() => setZoomImagem(c.evidencia_imagem)}
+                            >
+                              🔍 Ver em Tamanho Real
+                            </button>
+                          </div>
+                          <img
+                            src={c.evidencia_imagem}
+                            alt="Print do Erro"
+                            style={styles.printThumbTech}
+                            onClick={() => setZoomImagem(c.evidencia_imagem)}
+                            title="Clique para ampliar o print"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -568,6 +592,23 @@ export default function MinhasTarefas() {
               >
                 {salvandoCorrecao ? "Enviando..." : "🔁 Retornar para Nova Validação"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE LIGHTBOX / ZOOM DE IMAGEM */}
+      {zoomImagem && (
+        <div style={styles.lightboxOverlay} onClick={() => setZoomImagem(null)}>
+          <div style={styles.lightboxContent} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.lightboxHeader}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>📸 Print / Evidência do Erro</span>
+              <button style={styles.btnLightboxClose} onClick={() => setZoomImagem(null)}>
+                ✖
+              </button>
+            </div>
+            <div style={styles.lightboxImgWrap}>
+              <img src={zoomImagem} alt="Print Ampliado" style={styles.lightboxImage} />
             </div>
           </div>
         </div>
@@ -943,5 +984,97 @@ const styles = {
     fontSize: 13,
     fontWeight: 700,
     cursor: "pointer"
+  },
+
+  /* ESTILOS DE PRINT / LIGHTBOX */
+  printContainerTech: {
+    marginTop: 8,
+    padding: "8px 10px",
+    background: "#fff",
+    border: "1px solid #fca5a5",
+    borderRadius: 8,
+    display: "flex",
+    flexDirection: "column",
+    gap: 6
+  },
+  printHeaderTech: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    fontSize: 11,
+    color: "#991b1b"
+  },
+  btnZoomPrintTech: {
+    background: "#fee2e2",
+    border: "1px solid #fca5a5",
+    color: "#991b1b",
+    borderRadius: 6,
+    padding: "2px 8px",
+    fontSize: 11,
+    fontWeight: 700,
+    cursor: "pointer"
+  },
+  printThumbTech: {
+    maxHeight: 150,
+    maxWidth: 260,
+    objectFit: "contain",
+    borderRadius: 6,
+    border: "1px solid #cbd5e1",
+    cursor: "pointer",
+    background: "#f8fafc"
+  },
+  lightboxOverlay: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: "rgba(15, 23, 42, 0.85)",
+    backdropFilter: "blur(6px)",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10000,
+    padding: 20
+  },
+  lightboxContent: {
+    maxWidth: "90vw",
+    maxHeight: "90vh",
+    display: "flex",
+    flexDirection: "column",
+    gap: 10
+  },
+  lightboxHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  btnLightboxClose: {
+    background: "rgba(255, 255, 255, 0.2)",
+    border: "none",
+    borderRadius: "50%",
+    width: 30,
+    height: 30,
+    color: "#fff",
+    fontSize: 16,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  lightboxImgWrap: {
+    overflow: "auto",
+    maxHeight: "82vh",
+    borderRadius: 8,
+    border: "1px solid rgba(255, 255, 255, 0.2)",
+    background: "#0f172a",
+    display: "flex",
+    justifyContent: "center"
+  },
+  lightboxImage: {
+    maxWidth: "100%",
+    maxHeight: "80vh",
+    objectFit: "contain",
+    borderRadius: 6
   }
 };

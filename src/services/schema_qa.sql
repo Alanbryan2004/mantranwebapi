@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS public.qa_cenarios (
     status TEXT NOT NULL DEFAULT 'PENDENTE', -- 'PENDENTE', 'OK', 'ERRO'
     observacao_erro TEXT,
     observacao_correcao TEXT,
+    evidencia_imagem TEXT, -- Print / screenshot do erro em base64 ou URL
     tecnico_id UUID,
     tecnico_nome TEXT,
     qa_id UUID,
@@ -17,6 +18,19 @@ CREATE TABLE IF NOT EXISTS public.qa_cenarios (
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Caso a tabela já exista, adiciona a coluna evidencia_imagem se não existir
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'qa_cenarios' 
+        AND column_name = 'evidencia_imagem'
+    ) THEN 
+        ALTER TABLE public.qa_cenarios ADD COLUMN evidencia_imagem TEXT; 
+    END IF; 
+END $$;
 
 -- Índices para busca rápida
 CREATE INDEX IF NOT EXISTS idx_qa_cenarios_tela ON public.qa_cenarios(tela);
