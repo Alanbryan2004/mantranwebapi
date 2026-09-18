@@ -97,6 +97,52 @@ export default function QATestes() {
   // Modal de Visualização de Imagem em Tamanho Real (Lightbox)
   const [modalZoomImagem, setModalZoomImagem] = useState(null);
 
+  // Escuta colar (Ctrl+V) global na tela quando o modal de erro estiver aberto
+  useEffect(() => {
+    if (!modalErro) return;
+
+    const handleGlobalPaste = (e) => {
+      const items = (e.clipboardData || window.clipboardData)?.items;
+      if (items) {
+        for (let item of items) {
+          if (item.type && item.type.indexOf("image") === 0) {
+            const file = item.getAsFile();
+            processarImagem(file, (dataUrl) => {
+              setImagemErro(dataUrl);
+            });
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener("paste", handleGlobalPaste);
+    return () => window.removeEventListener("paste", handleGlobalPaste);
+  }, [modalErro]);
+
+  async function colarDoClipboard() {
+    try {
+      if (navigator.clipboard && navigator.clipboard.read) {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          const imageTypes = item.types.filter((type) => type.startsWith("image/"));
+          if (imageTypes.length > 0) {
+            const blob = await item.getType(imageTypes[0]);
+            processarImagem(blob, (dataUrl) => {
+              setImagemErro(dataUrl);
+            });
+            return;
+          }
+        }
+        alert("Nenhuma imagem encontrada na área de transferência. Tire o print (PrintScreen ou Win+Shift+S) e tente novamente.");
+      } else {
+        alert("Pressione Ctrl+V no teclado para colar o print.");
+      }
+    } catch (err) {
+      alert("Para colar, basta pressionar Ctrl+V no teclado.");
+    }
+  }
+
   async function carregar() {
     try {
       setErro("");
@@ -854,12 +900,12 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
                 {/* ANEXO DE PRINT DO ERRO */}
                 <div style={styles.fieldGroup}>
                   <label style={styles.label}>
-                    📸 Print / Evidência Visual do Erro (Opcional)
+                    📸 Print / Evidência Visual do Erro (PrintScreen / Captura de Tela)
                   </label>
                   
                   {imagemErro ? (
                     <div style={styles.imageUploadedCard}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                         <img
                           src={imagemErro}
                           alt="Print do Erro"
@@ -868,42 +914,69 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
                           title="Clique para ampliar"
                         />
                         <div>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: "#16a34a" }}>
-                            ✅ Print anexado com sucesso!
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "#16a34a" }}>
+                            ✅ Print colado / anexado com sucesso!
                           </div>
                           <div style={{ fontSize: 11, color: "#6b7280" }}>
-                            O técnico poderá ver este print em Minhas Tarefas.
+                            O técnico verá esta captura em Minhas Tarefas para agilizar a correção.
                           </div>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        style={styles.btnRemoveImg}
-                        onClick={() => setImagemErro(null)}
-                      >
-                        <X size={14} /> Remover Print
-                      </button>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button
+                          type="button"
+                          style={styles.btnVerPrintMini}
+                          onClick={() => setModalZoomImagem(imagemErro)}
+                        >
+                          <Maximize2 size={13} /> Visualizar
+                        </button>
+                        <button
+                          type="button"
+                          style={styles.btnRemoveImg}
+                          onClick={() => setImagemErro(null)}
+                        >
+                          <X size={13} /> Remover
+                        </button>
+                      </div>
                     </div>
                   ) : (
-                    <div style={styles.uploadArea}>
-                      <input
-                        type="file"
-                        id="file-print-qa"
-                        accept="image/*"
-                        style={{ display: "none" }}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            processarImagem(file, (dataUrl) => {
-                              setImagemErro(dataUrl);
-                            });
-                          }
-                        }}
-                      />
-                      <label htmlFor="file-print-qa" style={styles.uploadBtnLabel}>
-                        <Camera size={18} color="#b91c1c" />
-                        <span>Clique para <strong>selecionar uma imagem</strong> ou cole com <strong>Ctrl+V</strong></span>
-                      </label>
+                    <div style={styles.uploadContainer}>
+                      <div style={styles.pasteHintBox}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 18 }}>💡</span>
+                          <span style={{ fontSize: 12, color: "#374151" }}>
+                            Tirou print da tela com <strong>PrintScreen</strong> ou <strong>Win + Shift + S</strong>? Basta pressionar <strong>Ctrl + V</strong> agora!
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={colarDoClipboard}
+                          style={styles.btnColarClipboard}
+                        >
+                          📋 Colar Print (Ctrl+V)
+                        </button>
+                      </div>
+
+                      <div style={styles.uploadArea}>
+                        <input
+                          type="file"
+                          id="file-print-qa"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              processarImagem(file, (dataUrl) => {
+                                setImagemErro(dataUrl);
+                              });
+                            }
+                          }}
+                        />
+                        <label htmlFor="file-print-qa" style={styles.uploadBtnLabel}>
+                          <Camera size={16} color="#6b7280" />
+                          <span>Ou clique aqui para selecionar um arquivo de imagem do computador</span>
+                        </label>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1522,10 +1595,52 @@ const styles = {
     alignItems: "center",
     gap: 4
   },
+  uploadContainer: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8
+  },
+  pasteHintBox: {
+    background: "#fffbeb",
+    border: "1px solid #fde68a",
+    borderRadius: 8,
+    padding: "8px 12px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  btnColarClipboard: {
+    background: "#b91c1c",
+    color: "#fff",
+    border: "none",
+    borderRadius: 6,
+    padding: "6px 12px",
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: 4
+  },
+  btnVerPrintMini: {
+    background: "#eff6ff",
+    border: "1px solid #bfdbfe",
+    color: "#1d4ed8",
+    borderRadius: 6,
+    padding: "4px 8px",
+    fontSize: 11,
+    fontWeight: 700,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: 4
+  },
   uploadArea: {
     border: "2px dashed #cbd5e1",
     borderRadius: 8,
-    padding: "12px",
+    padding: "10px",
     textAlign: "center",
     background: "#f8fafc",
     cursor: "pointer",
