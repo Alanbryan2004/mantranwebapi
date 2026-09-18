@@ -352,9 +352,10 @@ export default function QATestes() {
 
   async function mudarStatusCenario(cenario, novoStatus) {
     if (novoStatus === "ERRO") {
-      setModalErro({ cenario, erroTexto: cenario.observacao_erro || "", imagem: cenario.evidencia_imagem || null });
+      const imgsExistentes = getImagensCenario(cenario);
+      setModalErro({ cenario, erroTexto: cenario.observacao_erro || "", imagens: imgsExistentes });
       setTextoErro(cenario.observacao_erro || "");
-      setImagemErro(cenario.evidencia_imagem || null);
+      setImagensErro(imgsExistentes);
       return;
     }
 
@@ -379,16 +380,23 @@ export default function QATestes() {
 
     setSalvandoErro(true);
     try {
+      const payloadImagem =
+        imagensErro.length === 0
+          ? null
+          : imagensErro.length === 1
+          ? imagensErro[0]
+          : JSON.stringify(imagensErro);
+
       await apiPatch(`/rest/v1/qa_cenarios?id=eq.${modalErro.cenario.id}`, {
         status: "ERRO",
         observacao_erro: textoErro.trim(),
-        evidencia_imagem: imagemErro || null,
+        evidencia_imagem: payloadImagem,
         qa_id: user?.id || null,
         qa_nome: user?.nome || user?.login || "QA",
         updated_at: new Date().toISOString()
       });
       setModalErro(null);
-      setImagemErro(null);
+      setImagensErro([]);
       await carregar();
     } catch (e) {
       alert("Erro ao registrar erro: " + (e.message || String(e)));
@@ -690,30 +698,47 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
                                               <AlertTriangle size={14} /> Detalhe do Erro Apontado pelo QA ({c.qa_nome || "QA"}):
                                             </div>
                                             <div style={styles.erroBoxContent}>{c.observacao_erro}</div>
-
-                                            {/* PRINT ANEXADO */}
-                                            {c.evidencia_imagem && (
-                                              <div style={styles.printPreviewWrap}>
-                                                <div style={styles.printHeader}>
-                                                  <Camera size={13} color="#b91c1c" />
-                                                  <span style={{ fontSize: 11, fontWeight: 700, color: "#991b1b" }}>Print / Evidência do Erro:</span>
-                                                  <button
-                                                    type="button"
-                                                    style={styles.btnVerPrint}
-                                                    onClick={() => setModalZoomImagem(c.evidencia_imagem)}
-                                                  >
-                                                    <Maximize2 size={12} /> Ampliar Print
-                                                  </button>
+                                            {/* PRINTS ANEXADOS */}
+                                            {(() => {
+                                              const cImgs = getImagensCenario(c);
+                                              if (cImgs.length === 0) return null;
+                                              return (
+                                                <div style={styles.printPreviewWrap}>
+                                                  <div style={styles.printHeader}>
+                                                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                                      <Camera size={13} color="#b91c1c" />
+                                                      <span style={{ fontSize: 11, fontWeight: 700, color: "#991b1b" }}>
+                                                        Prints / Evidências ({cImgs.length}):
+                                                      </span>
+                                                    </div>
+                                                    <button
+                                                      type="button"
+                                                      style={styles.btnVerPrint}
+                                                      onClick={() => setModalZoomImagem({ imagens: cImgs, index: 0 })}
+                                                    >
+                                                      <Maximize2 size={12} /> Ver em Tela Cheia
+                                                    </button>
+                                                  </div>
+                                                  <div style={styles.galleryGrid}>
+                                                    {cImgs.map((img, imgIdx) => (
+                                                      <div
+                                                        key={imgIdx}
+                                                        style={styles.galleryItem}
+                                                        onClick={() => setModalZoomImagem({ imagens: cImgs, index: imgIdx })}
+                                                      >
+                                                        <img
+                                                          src={img}
+                                                          alt={`Print ${imgIdx + 1}`}
+                                                          style={styles.galleryThumb}
+                                                          title={`Print #${imgIdx + 1} - Clique para ampliar`}
+                                                        />
+                                                        <span style={styles.galleryBadge}>#{imgIdx + 1}</span>
+                                                      </div>
+                                                    ))}
+                                                  </div>
                                                 </div>
-                                                <img
-                                                  src={c.evidencia_imagem}
-                                                  alt="Evidência do Erro"
-                                                  style={styles.printThumb}
-                                                  onClick={() => setModalZoomImagem(c.evidencia_imagem)}
-                                                  title="Clique para visualizar em tamanho real"
-                                                />
-                                              </div>
-                                            )}
+                                              );
+                                            })()}
                                           </div>
                                         )}
 
@@ -900,10 +925,10 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
                       const items = (e.clipboardData || window.clipboardData)?.items;
                       if (items) {
                         for (let item of items) {
-                          if (item.type.indexOf("image") === 0) {
+                          if (item.type && item.type.indexOf("image") === 0) {
                             const file = item.getAsFile();
                             processarImagem(file, (dataUrl) => {
-                              setImagemErro(dataUrl);
+                              setImagensErro((prev) => [...prev, dataUrl]);
                             });
                             break;
                           }
@@ -932,34 +957,38 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
                     <div style={styles.multiPrintListWrap}>
                       {imagensErro.map((img, i) => (
                         <div key={i} style={styles.multiPrintItem}>
-                          <div style={{ position: "relative" }}>
+                          <div
+                            style={styles.multiPrintThumbWrap}
+                            onClick={() => setModalZoomImagem({ imagens: imagensErro, index: i })}
+                            title="Clique para ver em tela cheia"
+                          >
                             <img
                               src={img}
                               alt={`Print ${i + 1}`}
                               style={styles.multiPrintThumb}
-                              onClick={() => setModalZoomImagem({ imagens: imagensErro, index: i })}
-                              title="Clique para ampliar"
                             />
                             <span style={styles.multiPrintBadge}>#{i + 1}</span>
                           </div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: "#1e293b" }}>
+                          <div style={styles.multiPrintInfo}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "#1e293b", textAlign: "center" }}>
                               Print #{i + 1}
                             </div>
-                            <div style={{ display: "flex", gap: 6 }}>
+                            <div style={{ display: "flex", gap: 4 }}>
                               <button
                                 type="button"
                                 style={styles.btnVerPrintMini}
                                 onClick={() => setModalZoomImagem({ imagens: imagensErro, index: i })}
+                                title="Visualizar print em tamanho real"
                               >
-                                <Maximize2 size={12} /> Ver
+                                <Maximize2 size={11} /> Ver
                               </button>
                               <button
                                 type="button"
                                 style={styles.btnRemoveImg}
                                 onClick={() => setImagensErro((prev) => prev.filter((_, idx) => idx !== i))}
+                                title="Excluir este print"
                               >
-                                <X size={12} /> Remover
+                                <X size={11} /> Excluir
                               </button>
                             </div>
                           </div>
@@ -1501,15 +1530,17 @@ const styles = {
     background: "#fff",
     borderRadius: 14,
     width: "100%",
-    maxWidth: 560,
-    boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
+    maxWidth: 580,
+    maxHeight: "90vh",
+    boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.2)",
     display: "flex",
     flexDirection: "column",
     overflow: "hidden"
   },
   modalHeader: {
-    padding: "16px 20px",
-    borderBottom: "1px solid #e2e8f0"
+    padding: "14px 20px",
+    borderBottom: "1px solid #e2e8f0",
+    flexShrink: 0
   },
   modalTitle: {
     fontSize: 16,
@@ -1524,10 +1555,12 @@ const styles = {
     display: "block"
   },
   modalBody: {
-    padding: "20px",
+    padding: "16px 20px",
     display: "flex",
     flexDirection: "column",
-    gap: 14
+    gap: 12,
+    overflowY: "auto",
+    maxHeight: "calc(90vh - 130px)"
   },
   fieldGroup: {
     display: "flex",
@@ -1555,12 +1588,13 @@ const styles = {
     resize: "vertical"
   },
   modalFooter: {
-    padding: "14px 20px",
+    padding: "12px 20px",
     borderTop: "1px solid #f1f5f9",
     background: "#f8fafc",
     display: "flex",
     justifyContent: "flex-end",
-    gap: 10
+    gap: 10,
+    flexShrink: 0
   },
   btnModalCancel: {
     background: "#fff",
@@ -1613,47 +1647,119 @@ const styles = {
     alignItems: "center",
     gap: 4
   },
-  printThumb: {
-    maxHeight: 140,
-    maxWidth: 240,
-    objectFit: "contain",
-    borderRadius: 6,
-    border: "1px solid #e2e8f0",
-    cursor: "pointer",
-    transition: "transform 0.2s",
-    background: "#f8fafc"
-  },
-  imageUploadedCard: {
-    padding: "8px 12px",
-    background: "#f0fdf4",
-    border: "1px solid #bbf7d0",
-    borderRadius: 8,
+  galleryGrid: {
     display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
     flexWrap: "wrap",
-    gap: 8
+    gap: 8,
+    marginTop: 4
   },
-  imageUploadedThumb: {
-    width: 48,
-    height: 48,
-    objectFit: "cover",
+  galleryItem: {
+    position: "relative",
+    cursor: "pointer",
     borderRadius: 6,
-    border: "1px solid #86efac",
+    overflow: "hidden",
+    border: "1px solid #fca5a5",
+    background: "#f8fafc",
+    lineHeight: 0
+  },
+  galleryThumb: {
+    height: 70,
+    width: 110,
+    objectFit: "cover",
     cursor: "pointer"
+  },
+  galleryBadge: {
+    position: "absolute",
+    bottom: 4,
+    right: 4,
+    background: "rgba(15, 23, 42, 0.75)",
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: 700,
+    padding: "1px 5px",
+    borderRadius: 4
+  },
+  multiPrintListWrap: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
+    gap: 10,
+    maxHeight: 180,
+    overflowY: "auto",
+    padding: 8,
+    background: "#f8fafc",
+    borderRadius: 8,
+    border: "1px solid #e2e8f0"
+  },
+  multiPrintItem: {
+    display: "flex",
+    flexDirection: "column",
+    background: "#fff",
+    border: "1px solid #cbd5e1",
+    borderRadius: 8,
+    overflow: "hidden",
+    boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
+  },
+  multiPrintThumbWrap: {
+    position: "relative",
+    width: "100%",
+    height: 75,
+    cursor: "pointer",
+    background: "#0f172a",
+    overflow: "hidden",
+    lineHeight: 0
+  },
+  multiPrintThumb: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    cursor: "pointer"
+  },
+  multiPrintBadge: {
+    position: "absolute",
+    bottom: 4,
+    right: 4,
+    background: "rgba(15, 23, 42, 0.8)",
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: 700,
+    padding: "1px 5px",
+    borderRadius: 4
+  },
+  multiPrintInfo: {
+    padding: "6px 8px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 4
+  },
+  btnVerPrintMini: {
+    background: "#eff6ff",
+    border: "1px solid #bfdbfe",
+    color: "#1d4ed8",
+    borderRadius: 6,
+    padding: "3px 6px",
+    fontSize: 10,
+    fontWeight: 700,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: 2,
+    flex: 1,
+    justifyContent: "center"
   },
   btnRemoveImg: {
     background: "#fee2e2",
     border: "1px solid #fca5a5",
     color: "#dc2626",
     borderRadius: 6,
-    padding: "4px 8px",
-    fontSize: 11,
+    padding: "3px 6px",
+    fontSize: 10,
     fontWeight: 700,
     cursor: "pointer",
     display: "flex",
     alignItems: "center",
-    gap: 4
+    gap: 2,
+    flex: 1,
+    justifyContent: "center"
   },
   uploadContainer: {
     display: "flex",
@@ -1678,19 +1784,6 @@ const styles = {
     borderRadius: 6,
     padding: "6px 12px",
     fontSize: 12,
-    fontWeight: 700,
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    gap: 4
-  },
-  btnVerPrintMini: {
-    background: "#eff6ff",
-    border: "1px solid #bfdbfe",
-    color: "#1d4ed8",
-    borderRadius: 6,
-    padding: "4px 8px",
-    fontSize: 11,
     fontWeight: 700,
     cursor: "pointer",
     display: "flex",
@@ -1740,6 +1833,17 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center"
+  },
+  btnLightboxNav: {
+    background: "rgba(255, 255, 255, 0.2)",
+    border: "none",
+    borderRadius: 6,
+    width: 32,
+    height: 32,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer"
   },
   btnLightboxClose: {
     background: "rgba(255, 255, 255, 0.2)",
