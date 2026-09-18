@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import AppShell from "../components/AppShell";
 import { apiGet, rpc, apiPatch, limparApontamentosAntigos } from "../services/api";
 import { useAuth } from "../contexts/AuthContext";
+import { getImagensCenario } from "./QATestes";
+import { ChevronLeft, ChevronRight, X, Image as ImageIcon } from "lucide-react";
 
 export default function MinhasTarefas() {
   const { user } = useAuth();
@@ -18,7 +20,7 @@ export default function MinhasTarefas() {
   const [modalQa, setModalQa] = useState(null); // { tela, tarefa, cenariosErro }
   const [notaCorrecao, setNotaCorrecao] = useState("");
   const [salvandoCorrecao, setSalvandoCorrecao] = useState(false);
-  const [zoomImagem, setZoomImagem] = useState(null);
+  const [modalZoomImagem, setModalZoomImagem] = useState(null); // { imagens: [], index: 0 }
 
   const tecnicoId = user?.id;
   const tecnicoNome = user?.nome;
@@ -366,12 +368,28 @@ export default function MinhasTarefas() {
                             </div>
                           </div>
                         </div>
-                        <button
-                          onClick={() => abrirModalQa(t, errosQa)}
-                          style={styles.btnVerErroQa}
-                        >
-                          ⚠️ Reprovado - Ver Erro e Revalidar
-                        </button>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {(() => {
+                            const todasImagens = errosQa.flatMap(c => getImagensCenario(c));
+                            if (todasImagens.length === 0) return null;
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setModalZoomImagem({ imagens: todasImagens, index: 0 })}
+                                style={styles.btnVerPrintBanner}
+                                title="Visualizar prints do erro anexados pelo QA"
+                              >
+                                📸 Ver Prints do Erro ({todasImagens.length})
+                              </button>
+                            );
+                          })()}
+                          <button
+                            onClick={() => abrirModalQa(t, errosQa)}
+                            style={styles.btnVerErroQa}
+                          >
+                            ⚠️ Reprovado - Ver Erro e Revalidar
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -447,12 +465,28 @@ export default function MinhasTarefas() {
                       )}
 
                       {isReprovada && (
-                        <button
-                          style={styles.btnReprovadoAction}
-                          onClick={() => abrirModalQa(t, errosQa)}
-                        >
-                          🚨 Reprovado
-                        </button>
+                        <>
+                          <button
+                            style={styles.btnReprovadoAction}
+                            onClick={() => abrirModalQa(t, errosQa)}
+                          >
+                            🚨 Reprovado
+                          </button>
+                          {(() => {
+                            const todasImagens = errosQa.flatMap(c => getImagensCenario(c));
+                            if (todasImagens.length === 0) return null;
+                            return (
+                              <button
+                                type="button"
+                                style={styles.btnVerPrintAction}
+                                onClick={() => setModalZoomImagem({ imagens: todasImagens, index: 0 })}
+                                title="Visualizar prints do erro anexados pelo QA"
+                              >
+                                📸 Prints ({todasImagens.length})
+                              </button>
+                            );
+                          })()}
+                        </>
                       )}
                     </div>
 
@@ -535,28 +569,42 @@ export default function MinhasTarefas() {
                         {c.observacao_erro || "Nenhum detalhe adicional informado."}
                       </div>
 
-                      {/* PRINT ANEXADO PELO QA */}
-                      {c.evidencia_imagem && (
-                        <div style={styles.printContainerTech}>
-                          <div style={styles.printHeaderTech}>
-                            <span>📸 <strong>Print / Evidência Anexada pelo QA:</strong></span>
-                            <button
-                              type="button"
-                              style={styles.btnZoomPrintTech}
-                              onClick={() => setZoomImagem(c.evidencia_imagem)}
-                            >
-                              🔍 Ver em Tamanho Real
-                            </button>
+                      {/* PRINTS ANEXADOS PELO QA */}
+                      {(() => {
+                        const cImagens = getImagensCenario(c);
+                        if (cImagens.length === 0) return null;
+                        return (
+                          <div style={styles.printContainerTech}>
+                            <div style={styles.printHeaderTech}>
+                              <span>📸 <strong>Prints / Evidências Anexadas ({cImagens.length}):</strong></span>
+                              <button
+                                type="button"
+                                style={styles.btnZoomPrintTech}
+                                onClick={() => setModalZoomImagem({ imagens: cImagens, index: 0 })}
+                              >
+                                🔍 Ver em Tela Cheia
+                              </button>
+                            </div>
+                            <div style={styles.galleryGridTech}>
+                              {cImagens.map((img, imgIdx) => (
+                                <div
+                                  key={imgIdx}
+                                  style={styles.galleryItemTech}
+                                  onClick={() => setModalZoomImagem({ imagens: cImagens, index: imgIdx })}
+                                >
+                                  <img
+                                    src={img}
+                                    alt={`Print ${imgIdx + 1}`}
+                                    style={styles.printThumbTech}
+                                    title={`Print #${imgIdx + 1} - Clique para ampliar`}
+                                  />
+                                  <span style={styles.galleryBadgeTech}>#{imgIdx + 1}</span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                          <img
-                            src={c.evidencia_imagem}
-                            alt="Print do Erro"
-                            style={styles.printThumbTech}
-                            onClick={() => setZoomImagem(c.evidencia_imagem)}
-                            title="Clique para ampliar o print"
-                          />
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   </div>
                 ))}
@@ -597,22 +645,56 @@ export default function MinhasTarefas() {
         </div>
       )}
 
-      {/* MODAL DE LIGHTBOX / ZOOM DE IMAGEM */}
-      {zoomImagem && (
-        <div style={styles.lightboxOverlay} onClick={() => setZoomImagem(null)}>
-          <div style={styles.lightboxContent} onClick={(e) => e.stopPropagation()}>
-            <div style={styles.lightboxHeader}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>📸 Print / Evidência do Erro</span>
-              <button style={styles.btnLightboxClose} onClick={() => setZoomImagem(null)}>
-                ✖
-              </button>
-            </div>
-            <div style={styles.lightboxImgWrap}>
-              <img src={zoomImagem} alt="Print Ampliado" style={styles.lightboxImage} />
+      {/* MODAL DE LIGHTBOX / ZOOM DE IMAGEM COM NAVEGAÇÃO DE GALERIA */}
+      {modalZoomImagem && (() => {
+        const list = Array.isArray(modalZoomImagem.imagens)
+          ? modalZoomImagem.imagens
+          : typeof modalZoomImagem === "string"
+          ? [modalZoomImagem]
+          : [];
+        const idx = typeof modalZoomImagem.index === "number" ? modalZoomImagem.index : 0;
+        const currentImg = list[idx] || list[0];
+
+        return (
+          <div style={styles.lightboxOverlay} onClick={() => setModalZoomImagem(null)}>
+            <div style={styles.lightboxContent} onClick={(e) => e.stopPropagation()}>
+              <div style={styles.lightboxHeader}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", gap: 6 }}>
+                  <ImageIcon size={16} /> Print / Evidência do Erro {list.length > 1 ? `(${idx + 1} de ${list.length})` : ""}
+                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {list.length > 1 && (
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        style={styles.btnLightboxNav}
+                        disabled={idx === 0}
+                        onClick={() => setModalZoomImagem({ imagens: list, index: Math.max(0, idx - 1) })}
+                        title="Print Anterior"
+                      >
+                        <ChevronLeft size={18} color={idx === 0 ? "#64748b" : "#fff"} />
+                      </button>
+                      <button
+                        style={styles.btnLightboxNav}
+                        disabled={idx === list.length - 1}
+                        onClick={() => setModalZoomImagem({ imagens: list, index: Math.min(list.length - 1, idx + 1) })}
+                        title="Próximo Print"
+                      >
+                        <ChevronRight size={18} color={idx === list.length - 1 ? "#64748b" : "#fff"} />
+                      </button>
+                    </div>
+                  )}
+                  <button style={styles.btnLightboxClose} onClick={() => setModalZoomImagem(null)}>
+                    <X size={20} color="#fff" />
+                  </button>
+                </div>
+              </div>
+              <div style={styles.lightboxImgWrap}>
+                <img src={currentImg} alt={`Print ${idx + 1}`} style={styles.lightboxImage} />
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </AppShell>
   );
 }
@@ -842,6 +924,32 @@ const styles = {
     fontWeight: 700,
     fontSize: 12
   },
+  btnVerPrintBanner: {
+    background: "#fff",
+    border: "1px solid #dc2626",
+    color: "#dc2626",
+    borderRadius: 8,
+    padding: "6px 12px",
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: 4
+  },
+  btnVerPrintAction: {
+    background: "#eff6ff",
+    color: "#1d4ed8",
+    border: "1px solid #bfdbfe",
+    borderRadius: 10,
+    padding: "8px 12px",
+    cursor: "pointer",
+    fontWeight: 700,
+    fontSize: 12,
+    display: "flex",
+    alignItems: "center",
+    gap: 4
+  },
   badgeReprovado: {
     marginLeft: 8,
     background: "#fee2e2",
@@ -1014,12 +1122,36 @@ const styles = {
     fontWeight: 700,
     cursor: "pointer"
   },
-  printThumbTech: {
-    maxHeight: 150,
-    maxWidth: 260,
-    objectFit: "contain",
+  galleryGridTech: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 4
+  },
+  galleryItemTech: {
+    position: "relative",
+    cursor: "pointer",
     borderRadius: 6,
+    overflow: "hidden",
     border: "1px solid #cbd5e1",
+    background: "#f8fafc",
+    lineHeight: 0
+  },
+  galleryBadgeTech: {
+    position: "absolute",
+    bottom: 4,
+    right: 4,
+    background: "rgba(15, 23, 42, 0.75)",
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: 700,
+    padding: "1px 5px",
+    borderRadius: 4
+  },
+  printThumbTech: {
+    height: 90,
+    width: 140,
+    objectFit: "cover",
     cursor: "pointer",
     background: "#f8fafc"
   },
@@ -1049,12 +1181,23 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center"
   },
+  btnLightboxNav: {
+    background: "rgba(255, 255, 255, 0.2)",
+    border: "none",
+    borderRadius: 6,
+    width: 32,
+    height: 32,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer"
+  },
   btnLightboxClose: {
     background: "rgba(255, 255, 255, 0.2)",
     border: "none",
     borderRadius: "50%",
-    width: 30,
-    height: 30,
+    width: 32,
+    height: 32,
     color: "#fff",
     fontSize: 16,
     cursor: "pointer",

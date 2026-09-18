@@ -17,6 +17,8 @@ import {
   ShieldCheck,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   MessageSquare,
   Copy,
   Check,
@@ -63,6 +65,22 @@ function processarImagem(file, callback) {
   reader.readAsDataURL(file);
 }
 
+// Extrai array de imagens do cenário (com suporte a JSON array ou string legada)
+export function getImagensCenario(cenario) {
+  if (!cenario || !cenario.evidencia_imagem) return [];
+  if (Array.isArray(cenario.evidencia_imagem)) return cenario.evidencia_imagem;
+  try {
+    const parsed = JSON.parse(cenario.evidencia_imagem);
+    if (Array.isArray(parsed)) return parsed.filter(Boolean);
+    if (typeof parsed === "string" && parsed.trim()) return [parsed];
+  } catch {
+    if (typeof cenario.evidencia_imagem === "string" && cenario.evidencia_imagem.trim()) {
+      return [cenario.evidencia_imagem];
+    }
+  }
+  return [];
+}
+
 export default function QATestes() {
   const { user } = useAuth();
 
@@ -89,13 +107,13 @@ export default function QATestes() {
   const [salvandoCenario, setSalvandoCenario] = useState(false);
 
   // Modal de Registro de Erro pelo QA
-  const [modalErro, setModalErro] = useState(null); // { cenario, erroTexto, imagem }
+  const [modalErro, setModalErro] = useState(null); // { cenario, erroTexto, imagens }
   const [textoErro, setTextoErro] = useState("");
-  const [imagemErro, setImagemErro] = useState(null);
+  const [imagensErro, setImagensErro] = useState([]); // array de data URLs
   const [salvandoErro, setSalvandoErro] = useState(false);
 
-  // Modal de Visualização de Imagem em Tamanho Real (Lightbox)
-  const [modalZoomImagem, setModalZoomImagem] = useState(null);
+  // Modal de Visualização de Imagem em Tamanho Real (Lightbox com suporte a galeria)
+  const [modalZoomImagem, setModalZoomImagem] = useState(null); // { imagens: [], index: 0 }
 
   // Escuta colar (Ctrl+V) global na tela quando o modal de erro estiver aberto
   useEffect(() => {
@@ -108,7 +126,7 @@ export default function QATestes() {
           if (item.type && item.type.indexOf("image") === 0) {
             const file = item.getAsFile();
             processarImagem(file, (dataUrl) => {
-              setImagemErro(dataUrl);
+              setImagensErro((prev) => [...prev, dataUrl]);
             });
             break;
           }
@@ -129,7 +147,7 @@ export default function QATestes() {
           if (imageTypes.length > 0) {
             const blob = await item.getType(imageTypes[0]);
             processarImagem(blob, (dataUrl) => {
-              setImagemErro(dataUrl);
+              setImagensErro((prev) => [...prev, dataUrl]);
             });
             return;
           }
@@ -897,88 +915,98 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
                   />
                 </div>
 
-                {/* ANEXO DE PRINT DO ERRO */}
+                {/* ANEXO DE PRINTS DO ERRO (MÚLTIPLOS) */}
                 <div style={styles.fieldGroup}>
-                  <label style={styles.label}>
-                    📸 Print / Evidência Visual do Erro (PrintScreen / Captura de Tela)
-                  </label>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <label style={styles.label}>
+                      📸 Prints / Evidências Visuais do Erro ({imagensErro.length} anexado{imagensErro.length === 1 ? "" : "s"})
+                    </label>
+                    {imagensErro.length > 0 && (
+                      <span style={{ fontSize: 11, color: "#16a34a", fontWeight: 700 }}>
+                        Dica: Pode colar mais com Ctrl+V!
+                      </span>
+                    )}
+                  </div>
                   
-                  {imagemErro ? (
-                    <div style={styles.imageUploadedCard}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <img
-                          src={imagemErro}
-                          alt="Print do Erro"
-                          style={styles.imageUploadedThumb}
-                          onClick={() => setModalZoomImagem(imagemErro)}
-                          title="Clique para ampliar"
-                        />
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: "#16a34a" }}>
-                            ✅ Print colado / anexado com sucesso!
+                  {imagensErro.length > 0 && (
+                    <div style={styles.multiPrintListWrap}>
+                      {imagensErro.map((img, i) => (
+                        <div key={i} style={styles.multiPrintItem}>
+                          <div style={{ position: "relative" }}>
+                            <img
+                              src={img}
+                              alt={`Print ${i + 1}`}
+                              style={styles.multiPrintThumb}
+                              onClick={() => setModalZoomImagem({ imagens: imagensErro, index: i })}
+                              title="Clique para ampliar"
+                            />
+                            <span style={styles.multiPrintBadge}>#{i + 1}</span>
                           </div>
-                          <div style={{ fontSize: 11, color: "#6b7280" }}>
-                            O técnico verá esta captura em Minhas Tarefas para agilizar a correção.
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: "#1e293b" }}>
+                              Print #{i + 1}
+                            </div>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <button
+                                type="button"
+                                style={styles.btnVerPrintMini}
+                                onClick={() => setModalZoomImagem({ imagens: imagensErro, index: i })}
+                              >
+                                <Maximize2 size={12} /> Ver
+                              </button>
+                              <button
+                                type="button"
+                                style={styles.btnRemoveImg}
+                                onClick={() => setImagensErro((prev) => prev.filter((_, idx) => idx !== i))}
+                              >
+                                <X size={12} /> Remover
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button
-                          type="button"
-                          style={styles.btnVerPrintMini}
-                          onClick={() => setModalZoomImagem(imagemErro)}
-                        >
-                          <Maximize2 size={13} /> Visualizar
-                        </button>
-                        <button
-                          type="button"
-                          style={styles.btnRemoveImg}
-                          onClick={() => setImagemErro(null)}
-                        >
-                          <X size={13} /> Remover
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={styles.uploadContainer}>
-                      <div style={styles.pasteHintBox}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 18 }}>💡</span>
-                          <span style={{ fontSize: 12, color: "#374151" }}>
-                            Tirou print da tela com <strong>PrintScreen</strong> ou <strong>Win + Shift + S</strong>? Basta pressionar <strong>Ctrl + V</strong> agora!
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={colarDoClipboard}
-                          style={styles.btnColarClipboard}
-                        >
-                          📋 Colar Print (Ctrl+V)
-                        </button>
-                      </div>
-
-                      <div style={styles.uploadArea}>
-                        <input
-                          type="file"
-                          id="file-print-qa"
-                          accept="image/*"
-                          style={{ display: "none" }}
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              processarImagem(file, (dataUrl) => {
-                                setImagemErro(dataUrl);
-                              });
-                            }
-                          }}
-                        />
-                        <label htmlFor="file-print-qa" style={styles.uploadBtnLabel}>
-                          <Camera size={16} color="#6b7280" />
-                          <span>Ou clique aqui para selecionar um arquivo de imagem do computador</span>
-                        </label>
-                      </div>
+                      ))}
                     </div>
                   )}
+
+                  <div style={styles.uploadContainer}>
+                    <div style={styles.pasteHintBox}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 18 }}>💡</span>
+                        <span style={{ fontSize: 12, color: "#374151" }}>
+                          Pressione <strong>Ctrl + V</strong> a qualquer momento para colar um novo print!
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={colarDoClipboard}
+                        style={styles.btnColarClipboard}
+                      >
+                        📋 Colar Novo Print (Ctrl+V)
+                      </button>
+                    </div>
+
+                    <div style={styles.uploadArea}>
+                      <input
+                        type="file"
+                        id="file-print-qa"
+                        accept="image/*"
+                        multiple
+                        style={{ display: "none" }}
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []);
+                          for (const file of files) {
+                            processarImagem(file, (dataUrl) => {
+                              setImagensErro((prev) => [...prev, dataUrl]);
+                            });
+                          }
+                        }}
+                      />
+                      <label htmlFor="file-print-qa" style={styles.uploadBtnLabel}>
+                        <Camera size={16} color="#6b7280" />
+                        <span>Ou selecione imagens do computador (permite vários arquivos)</span>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -987,7 +1015,7 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
                   style={styles.btnModalCancel}
                   onClick={() => {
                     setModalErro(null);
-                    setImagemErro(null);
+                    setImagensErro([]);
                   }}
                   disabled={salvandoErro}
                 >
@@ -1005,24 +1033,56 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
           </div>
         )}
 
-        {/* MODAL DE LIGHTBOX / ZOOM DE IMAGEM */}
-        {modalZoomImagem && (
-          <div style={styles.lightboxOverlay} onClick={() => setModalZoomImagem(null)}>
-            <div style={styles.lightboxContent} onClick={(e) => e.stopPropagation()}>
-              <div style={styles.lightboxHeader}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", gap: 6 }}>
-                  <ImageIcon size={16} /> Print / Evidência do Erro
-                </span>
-                <button style={styles.btnLightboxClose} onClick={() => setModalZoomImagem(null)}>
-                  <X size={20} color="#fff" />
-                </button>
-              </div>
-              <div style={styles.lightboxImgWrap}>
-                <img src={modalZoomImagem} alt="Print Ampliado" style={styles.lightboxImage} />
+        {/* MODAL DE LIGHTBOX / ZOOM DE IMAGEM COM NAVEGAÇÃO DE GALERIA */}
+        {modalZoomImagem && (() => {
+          const list = Array.isArray(modalZoomImagem.imagens)
+            ? modalZoomImagem.imagens
+            : typeof modalZoomImagem === "string"
+            ? [modalZoomImagem]
+            : [];
+          const idx = typeof modalZoomImagem.index === "number" ? modalZoomImagem.index : 0;
+          const currentImg = list[idx] || list[0];
+
+          return (
+            <div style={styles.lightboxOverlay} onClick={() => setModalZoomImagem(null)}>
+              <div style={styles.lightboxContent} onClick={(e) => e.stopPropagation()}>
+                <div style={styles.lightboxHeader}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", gap: 6 }}>
+                    <ImageIcon size={16} /> Print / Evidência do Erro {list.length > 1 ? `(${idx + 1} de ${list.length})` : ""}
+                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    {list.length > 1 && (
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button
+                          style={styles.btnLightboxNav}
+                          disabled={idx === 0}
+                          onClick={() => setModalZoomImagem({ imagens: list, index: Math.max(0, idx - 1) })}
+                          title="Print Anterior"
+                        >
+                          <ChevronLeft size={18} color={idx === 0 ? "#64748b" : "#fff"} />
+                        </button>
+                        <button
+                          style={styles.btnLightboxNav}
+                          disabled={idx === list.length - 1}
+                          onClick={() => setModalZoomImagem({ imagens: list, index: Math.min(list.length - 1, idx + 1) })}
+                          title="Próximo Print"
+                        >
+                          <ChevronRight size={18} color={idx === list.length - 1 ? "#64748b" : "#fff"} />
+                        </button>
+                      </div>
+                    )}
+                    <button style={styles.btnLightboxClose} onClick={() => setModalZoomImagem(null)}>
+                      <X size={20} color="#fff" />
+                    </button>
+                  </div>
+                </div>
+                <div style={styles.lightboxImgWrap}>
+                  <img src={currentImg} alt={`Print ${idx + 1}`} style={styles.lightboxImage} />
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </AppShell>
   );
