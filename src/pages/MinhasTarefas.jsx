@@ -8,10 +8,16 @@ export default function MinhasTarefas() {
 
   const [tarefas, setTarefas] = useState([]);
   const [apontamentos, setApontamentos] = useState([]);
+  const [cenariosQa, setCenariosQa] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
   const [busyId, setBusyId] = useState(null);
   const [now, setNow] = useState(Date.now());
+
+  // Modal de Análise e Correção de Erros de QA
+  const [modalQa, setModalQa] = useState(null); // { tela, tarefa, cenariosErro }
+  const [notaCorrecao, setNotaCorrecao] = useState("");
+  const [salvandoCorrecao, setSalvandoCorrecao] = useState(false);
 
   const tecnicoId = user?.id;
   const tecnicoNome = user?.nome;
@@ -25,19 +31,22 @@ export default function MinhasTarefas() {
       // Auto-pausa retroativa para garantir consistência de apontamentos anteriores
       await limparApontamentosAntigos();
 
-      const rows = await apiGet(
-        `/rest/v1/controle_api?select=id,tela,nome_tabela,tipo_tabela,nivel_api,peso_api,qtd_campos,tecnico_id,tecnico_nome,status_api,status_teste,status_documentacao,observacoes,modulo,data_inicio,data_fim_real,endpoints` +
-          `&tecnico_id=eq.${encodeURIComponent(tecnicoId)}` +
-          `&order=created_at.asc`
-      );
-
-      const allApontamentos = await apiGet(
-        `/rest/v1/apontamento_tempo?select=controle_api_id,inicio,fim` +
-          `&tecnico_id=eq.${encodeURIComponent(tecnicoId)}`
-      );
+      const [rows, allApontamentos, allQaCenarios] = await Promise.all([
+        apiGet(
+          `/rest/v1/controle_api?select=id,tela,nome_tabela,tipo_tabela,nivel_api,peso_api,qtd_campos,tecnico_id,tecnico_nome,status_api,status_teste,status_documentacao,observacoes,modulo,data_inicio,data_fim_real,endpoints` +
+            `&tecnico_id=eq.${encodeURIComponent(tecnicoId)}` +
+            `&order=created_at.asc`
+        ),
+        apiGet(
+          `/rest/v1/apontamento_tempo?select=controle_api_id,inicio,fim` +
+            `&tecnico_id=eq.${encodeURIComponent(tecnicoId)}`
+        ),
+        apiGet(`/rest/v1/qa_cenarios?select=*`).catch(() => [])
+      ]);
       
       setTarefas(rows || []);
       setApontamentos(allApontamentos || []);
+      setCenariosQa(allQaCenarios || []);
     } catch (e) {
       setErro(String(e.message || e));
     } finally {
@@ -74,18 +83,30 @@ export default function MinhasTarefas() {
     return (apontamentos || []).filter(a => !a.fim).map(a => a.controle_api_id);
   }, [apontamentos]);
 
+  // Verifica se a tarefa possui apontamento de erro no QA
+  const getErrosQaDaTarefa = (t) => {
+    const nomeTela = t.tela || t.nome_tabela;
+    return (cenariosQa || []).filter(
+      (c) => (c.tela === nomeTela || c.tela === t.tela || c.tela === t.nome_tabela) && c.status === "ERRO"
+    );
+  };
+
+  const isReprovadaQa = (t) => {
+    return getErrosQaDaTarefa(t).length > 0;
+  };
+
   const resumo = useMemo(() => {
     const total = tarefas.length;
-    const concluidas = tarefas.filter((t) => isConcluida(t)).length;
+    const concluidas = tarefas.filter((t) => isConcluida(t) && !isReprovadaQa(t)).length;
     const trabalhando = tarefas.filter((t) => apontAbertos.includes(t.id)).length;
     const pendentes = total - concluidas;
     return { total, pendentes, trabalhando, concluidas };
-  }, [tarefas, apontAbertos]);
+  }, [tarefas, apontAbertos, cenariosQa]);
 
-  // 👉 MOSTRAR SOMENTE TAREFAS NÃO CONCLUÍDAS
+  // 👉 MOSTRAR SOMENTE TAREFAS NÃO CONCLUÍDAS OU REPROVADAS NO QA
   const tarefasVisiveis = useMemo(() => {
-    return tarefas.filter((t) => !isConcluida(t));
-  }, [tarefas]);
+    return tarefas.filter((t) => !isConcluida(t) || isReprovadaQa(t));
+  }, [tarefas, cenariosQa]);
 
   async function iniciar(tarefa) {
     setBusyId(tarefa.id);
@@ -255,6 +276,40 @@ export default function MinhasTarefas() {
     }
   }
 
+  function abrirModalQa(tarefa, erros) {
+    setModalQa({
+      tarefa,
+      tela: tarefa.tela || tarefa.nome_tabela,
+      cenariosErro: erros
+    });
+    setNotaCorrecao("");
+  }
+
+  async function retornarParaValidacao() {
+    if (!notaCorrecao.trim()) {
+      alert("Por favor, informe a correção realizada antes de retornar para validação.");
+      return;
+    }
+
+    setSalvandoCorrecao(true);
+    try {
+      for (const cenario of modalQa.cenariosErro) {
+        await apiPatch(`/rest/v1/qa_cenarios?id=eq.${cenario.id}`, {
+          status: "PENDENTE",
+          observacao_correcao: notaCorrecao.trim(),
+          updated_at: new Date().toISOString()
+        });
+      }
+
+      setModalQa(null);
+      await carregar();
+    } catch (e) {
+      alert("Erro ao retornar para validação: " + (e.message || String(e)));
+    } finally {
+      setSalvandoCorrecao(false);
+    }
+  }
+
   return (
     <AppShell title="Minhas Tarefas">
       {loading && <div>Carregando...</div>}
@@ -280,16 +335,53 @@ export default function MinhasTarefas() {
               tarefasVisiveis.map((t) => {
                 const aberto = apontAbertos.includes(t.id);
                 const concl = isConcluida(t);
+                const errosQa = getErrosQaDaTarefa(t);
+                const isReprovada = errosQa.length > 0;
                 const podeFinalizar =
                   t.status_api === "Finalizado" &&
                   t.status_teste === "Finalizado" &&
                   t.status_documentacao === "Finalizado";
 
                 return (
-                  <div key={t.id} style={styles.taskCard}>
+                  <div 
+                    key={t.id} 
+                    style={{
+                      ...styles.taskCard,
+                      borderColor: isReprovada ? "#fca5a5" : "#eee",
+                      boxShadow: isReprovada ? "0 0 0 1px #ef4444, 0 4px 6px -1px rgba(239, 68, 68, 0.1)" : "none"
+                    }}
+                  >
+                    {/* ALERTA / BANNER SE A TELA ESTIVER REPROVADA PELO QA */}
+                    {isReprovada && (
+                      <div style={styles.reprovadoBanner}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ fontSize: 20 }}>🚨</span>
+                          <div>
+                            <div style={{ fontWeight: 800, color: "#991b1b", fontSize: 14 }}>
+                              REPROVADO PELO QA ({errosQa.length} {errosQa.length === 1 ? "apontamento de erro" : "apontamentos de erro"})
+                            </div>
+                            <div style={{ fontSize: 12, color: "#b91c1c" }}>
+                              Esta tela foi reprovada pela equipe de QA. Clique abaixo para verificar os erros e enviar para nova validação.
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => abrirModalQa(t, errosQa)}
+                          style={styles.btnVerErroQa}
+                        >
+                          ⚠️ Reprovado - Ver Erro e Revalidar
+                        </button>
+                      </div>
+                    )}
+
                     <div style={styles.taskTop}>
                       <div>
-                        <div style={styles.taskTitle}>{t.nome_tabela}</div>
+                        <div style={styles.taskTitle}>
+                          {t.nome_tabela}
+                          {isReprovada && (
+                            <span style={styles.badgeReprovado}>Reprovado no QA</span>
+                          )}
+                        </div>
                         <div style={styles.taskSub}>
                           Tela: <b>{t.tela}</b> | Tipo: <b>{t.tipo_tabela}</b> | Nível:{" "}
                           <b>{t.nivel_api}</b> | Campos: <b>{t.qtd_campos}</b>
@@ -342,14 +434,25 @@ export default function MinhasTarefas() {
                         ⏹ Finalizar
                       </button>
 
-                      <button
-                        style={btnWarning(!aberto)}
-                        disabled={busyId === t.id || aberto}
-                        onClick={() => devolver(t)}
-                        title="Devolver para Pendentes"
-                      >
-                        ↩ Devolver
-                      </button>
+                      {!concl && (
+                        <button
+                          style={btnWarning(!aberto)}
+                          disabled={busyId === t.id || aberto}
+                          onClick={() => devolver(t)}
+                          title="Devolver para Pendentes"
+                        >
+                          ↩ Devolver
+                        </button>
+                      )}
+
+                      {isReprovada && (
+                        <button
+                          style={styles.btnReprovadoAction}
+                          onClick={() => abrirModalQa(t, errosQa)}
+                        >
+                          🚨 Reprovado
+                        </button>
+                      )}
                     </div>
 
                     <div style={styles.statusRow}>
@@ -390,6 +493,84 @@ export default function MinhasTarefas() {
             )}
           </div>
         </>
+      )}
+
+      {/* MODAL PARA O TÉCNICO VER ERRO DO QA E RETORNAR PARA VALIDAÇÃO */}
+      {modalQa && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalCard}>
+            <div style={styles.modalHeader}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 20 }}>🚨</span>
+                <div>
+                  <h3 style={styles.modalTitle}>Apontamentos de Erro do QA</h3>
+                  <span style={styles.modalSubHeader}>Tela: <strong>{modalQa.tela}</strong></span>
+                </div>
+              </div>
+            </div>
+
+            <div style={styles.modalBody}>
+              <div style={{ fontSize: 13, color: "#374151" }}>
+                Abaixo estão os cenários de teste reprovados pelo QA para esta tela:
+              </div>
+
+              <div style={styles.qaErrorsList}>
+                {modalQa.cenariosErro.map((c, i) => (
+                  <div key={c.id} style={styles.qaErrorCard}>
+                    <div style={styles.qaErrorHeader}>
+                      <span style={styles.qaErrorBadge}>Cenário #{i + 1}</span>
+                      <strong style={{ fontSize: 13, color: "#111827" }}>{c.titulo}</strong>
+                    </div>
+
+                    {c.descricao && (
+                      <div style={styles.qaErrorDesc}>
+                        <strong>Regra de Negócio:</strong> {c.descricao}
+                      </div>
+                    )}
+
+                    <div style={styles.qaErrorObs}>
+                      <strong style={{ color: "#991b1b" }}>Erro apontado pelo QA ({c.qa_nome || "QA"}):</strong>
+                      <div style={{ marginTop: 4, color: "#7f1d1d", whiteSpace: "pre-wrap" }}>
+                        {c.observacao_erro || "Nenhum detalhe adicional informado."}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={styles.correcaoField}>
+                <label style={styles.correcaoLabel}>
+                  Descreva a correção efetuada: <span style={{ color: "red" }}>*</span>
+                </label>
+                <textarea
+                  style={styles.correcaoTextarea}
+                  placeholder="Ex: Corrigido tratamento de validação de duplicidade e ajustado status retornado para 400."
+                  value={notaCorrecao}
+                  onChange={(e) => setNotaCorrecao(e.target.value)}
+                  rows={4}
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div style={styles.modalFooter}>
+              <button
+                style={styles.btnModalCancel}
+                onClick={() => setModalQa(null)}
+                disabled={salvandoCorrecao}
+              >
+                Fechar
+              </button>
+              <button
+                style={styles.btnModalReturnQa}
+                onClick={retornarParaValidacao}
+                disabled={salvandoCorrecao}
+              >
+                {salvandoCorrecao ? "Enviando..." : "🔁 Retornar para Nova Validação"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </AppShell>
   );
@@ -586,4 +767,181 @@ const styles = {
     padding: 10,
     borderRadius: 12,
   },
+
+  /* ESTILOS QA */
+  reprovadoBanner: {
+    background: "#fef2f2",
+    border: "1px solid #fecaca",
+    borderRadius: 10,
+    padding: "10px 14px",
+    marginBottom: 14,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10
+  },
+  btnVerErroQa: {
+    background: "#dc2626",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8,
+    padding: "6px 12px",
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: "pointer"
+  },
+  btnReprovadoAction: {
+    background: "#fee2e2",
+    color: "#991b1b",
+    border: "1px solid #fca5a5",
+    borderRadius: 10,
+    padding: "8px 12px",
+    cursor: "pointer",
+    fontWeight: 700,
+    fontSize: 12
+  },
+  badgeReprovado: {
+    marginLeft: 8,
+    background: "#fee2e2",
+    color: "#dc2626",
+    border: "1px solid #fca5a5",
+    padding: "2px 8px",
+    borderRadius: 6,
+    fontSize: 11,
+    fontWeight: 800
+  },
+  modalOverlay: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: "rgba(15, 23, 42, 0.45)",
+    backdropFilter: "blur(4px)",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 9999,
+    padding: 16
+  },
+  modalCard: {
+    background: "#fff",
+    borderRadius: 14,
+    width: "100%",
+    maxWidth: 580,
+    boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden"
+  },
+  modalHeader: {
+    padding: "16px 20px",
+    borderBottom: "1px solid #fee2e2",
+    background: "#fff"
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 800,
+    color: "#991b1b",
+    margin: 0
+  },
+  modalSubHeader: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 2,
+    display: "block"
+  },
+  modalBody: {
+    padding: "20px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 14,
+    maxHeight: "65vh",
+    overflowY: "auto"
+  },
+  qaErrorsList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10
+  },
+  qaErrorCard: {
+    background: "#fef2f2",
+    border: "1px solid #fee2e2",
+    borderRadius: 8,
+    padding: "10px 12px"
+  },
+  qaErrorHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4
+  },
+  qaErrorBadge: {
+    fontSize: 10,
+    fontWeight: 800,
+    background: "#fee2e2",
+    color: "#b91c1c",
+    border: "1px solid #fca5a5",
+    padding: "2px 6px",
+    borderRadius: 4
+  },
+  qaErrorDesc: {
+    fontSize: 12,
+    color: "#475569",
+    marginTop: 4
+  },
+  qaErrorObs: {
+    fontSize: 12,
+    marginTop: 6,
+    paddingTop: 6,
+    borderTop: "1px dashed #fecaca"
+  },
+  correcaoField: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    marginTop: 6
+  },
+  correcaoLabel: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#1e293b"
+  },
+  correcaoTextarea: {
+    padding: "10px 12px",
+    borderRadius: 8,
+    border: "1px solid #cbd5e1",
+    fontSize: 13,
+    outline: "none",
+    resize: "vertical"
+  },
+  modalFooter: {
+    padding: "14px 20px",
+    borderTop: "1px solid #f1f5f9",
+    background: "#f8fafc",
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: 10
+  },
+  btnModalCancel: {
+    background: "#fff",
+    border: "1px solid #cbd5e1",
+    color: "#475569",
+    borderRadius: 8,
+    padding: "8px 16px",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer"
+  },
+  btnModalReturnQa: {
+    background: "#16a34a",
+    border: "none",
+    color: "#fff",
+    borderRadius: 8,
+    padding: "8px 18px",
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer"
+  }
 };

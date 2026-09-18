@@ -7,6 +7,7 @@ import MinhasTarefas from "./pages/MinhasTarefas";
 import Pendentes from "./pages/Pendentes";
 import HomeRedirect from "./pages/HomeRedirect";
 import Finalizadas from "./pages/Finalizadas";
+import QATestes from "./pages/QATestes";
 
 // 👉 TELA DE CADASTROS EXISTENTES
 import CadastroTelas from "./pages/CadastroTelas";
@@ -84,6 +85,18 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Finalizadas />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* =========================
+         QA Testes (Suporte / Admin / Técnico)
+      ========================= */}
+      <Route
+        path="/qa-testes"
+        element={
+          <ProtectedRoute>
+            <QATestes />
           </ProtectedRoute>
         }
       />

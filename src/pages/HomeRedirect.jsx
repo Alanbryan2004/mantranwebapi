@@ -10,5 +10,9 @@ export default function HomeRedirect() {
     return <Navigate to="/dashboard" replace />;
   }
 
+  if (user.perfil === "Suporte") {
+    return <Navigate to="/qa-testes" replace />;
+  }
+
   return <Navigate to="/minhas-tarefas" replace />;
 }

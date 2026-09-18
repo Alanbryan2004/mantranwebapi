@@ -1,17 +1,21 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
 // 👉 imagem dentro da pasta pages
 import LogoMantran from "./logo_mantran.png";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { user, login } = useAuth();
   const navigate = useNavigate();
 
   const [form, setForm] = useState({ login: "", senha: "" });
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
+
+  if (user) {
+    return <Navigate to={user.perfil === "Administrador" ? "/dashboard" : "/minhas-tarefas"} replace />;
+  }
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -23,7 +27,7 @@ export default function Login() {
 
       // Regras de redirecionamento:
       if (u.perfil === "Administrador") navigate("/dashboard");
-      else navigate("/minhas");
+      else navigate("/minhas-tarefas");
     } catch (err) {
       setErro(String(err.message || err));
     } finally {

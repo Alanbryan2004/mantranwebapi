@@ -12,6 +12,7 @@ export default function Sidebar() {
     { to: "/pendentes", label: "Tarefas Pendentes" },
     { to: "/minhas-tarefas", label: "Minhas Tarefas" },
     { to: "/finalizadas", label: "Finalizadas" },
+    { to: "/qa-testes", label: "QA Testes" },
     { 
       label: "Cronograma", 
       submenu: [
@@ -24,10 +25,22 @@ export default function Sidebar() {
     { to: "/usuarios", label: "Usuários" },
   ];
 
+  const linksSuporte = [
+    { to: "/qa-testes", label: "QA Testes" },
+    { to: "/finalizadas", label: "Finalizadas" },
+    { 
+      label: "Cronograma", 
+      submenu: [
+        { to: "/cronograma/visualizar", label: "Visualizar" },
+      ]
+    },
+  ];
+
   const linksTecnico = [
     { to: "/minhas-tarefas", label: "Minhas Tarefas" },
     { to: "/pendentes", label: "Pendentes" },
     { to: "/finalizadas", label: "Finalizadas" },
+    { to: "/qa-testes", label: "QA Testes" },
     { 
       label: "Cronograma", 
       submenu: [
@@ -37,7 +50,12 @@ export default function Sidebar() {
     },
   ];
 
-  const links = user?.perfil === "Administrador" ? linksAdmin : linksTecnico;
+  let links = linksTecnico;
+  if (user?.perfil === "Administrador") {
+    links = linksAdmin;
+  } else if (user?.perfil === "Suporte") {
+    links = linksSuporte;
+  }
 
   const toggleSubmenu = (label) => {
     setOpenSubmenu(openSubmenu === label ? "" : label);
