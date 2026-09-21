@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import AppShell from "../../components/AppShell";
 import { apiGet, rpc } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, XCircle, Clock, HelpCircle } from "lucide-react";
 
 function formatarHHMM(horasDecimais) {
     if (!horasDecimais) return "0h 0m";
@@ -17,6 +17,7 @@ export default function Visualizar() {
     const [lista, setLista] = useState([]);
     const [tecnicos, setTecnicos] = useState([]);
     const [apontamentos, setApontamentos] = useState([]);
+    const [cenariosQa, setCenariosQa] = useState([]);
     const [loading, setLoading] = useState(true);
     const [tooltipContent, setTooltipContent] = useState(null);
     const [filtroTecnico, setFiltroTecnico] = useState("");
@@ -24,10 +25,11 @@ export default function Visualizar() {
     async function carregar() {
         try {
             setLoading(true);
-            const [dataCronograma, dataTecnicos, dataApontamentos] = await Promise.all([
+            const [dataCronograma, dataTecnicos, dataApontamentos, dataCenarios] = await Promise.all([
                 apiGet("/rest/v1/cronograma?select=*,controle_api(tela,nome_tabela,tipo_tabela,status_api,status_teste,status_documentacao)&order=inicio.asc,termino.asc"),
                 apiGet("/rest/v1/usuario?select=id,nome"),
-                apiGet("/rest/v1/apontamento_tempo?select=controle_api_id,inicio,fim")
+                apiGet("/rest/v1/apontamento_tempo?select=controle_api_id,inicio,fim"),
+                apiGet("/rest/v1/qa_cenarios?select=*").catch(() => [])
             ]);
 
             const filteredData = (dataCronograma || []).filter(item => item.controle_api?.tipo_tabela !== "Arquitetura");
@@ -65,6 +67,7 @@ export default function Visualizar() {
 
             setLista(filteredData);
             setTecnicos(dataTecnicos || []);
+            setCenariosQa(dataCenarios || []);
         } catch (err) {
             console.error("Erro ao carregar dados", err);
         } finally {
@@ -79,6 +82,62 @@ export default function Visualizar() {
     const getNomeTecnico = (id) => {
         const tec = tecnicos.find(t => t.id === id);
         return tec ? tec.nome : "Desconhecido";
+    };
+
+    const getQaStatus = (item) => {
+        const tela = (item.controle_api?.tela || "").trim();
+        const nomeTabela = (item.controle_api?.nome_tabela || "").trim();
+
+        const cenarios = (cenariosQa || []).filter((c) => {
+            if (!c.tela) return false;
+            const cTela = c.tela.trim().toLowerCase();
+            return (
+                (tela && cTela === tela.toLowerCase()) ||
+                (nomeTabela && cTela === nomeTabela.toLowerCase())
+            );
+        });
+
+        if (cenarios.length === 0) {
+            return {
+                status: "SEM_CENARIOS",
+                label: "Sem cenários cadastrados no QA",
+                cor: "#9ca3af",
+                bg: "#f3f4f6",
+                Icon: HelpCircle
+            };
+        }
+
+        const erros = cenarios.filter((c) => c.status === "ERRO");
+        if (erros.length > 0) {
+            return {
+                status: "REPROVADO",
+                label: `Reprovada no QA (${erros.length} erro${erros.length > 1 ? "s" : ""})`,
+                cor: "#dc2626",
+                bg: "#fee2e2",
+                Icon: XCircle
+            };
+        }
+
+        const todosOk = cenarios.every((c) => c.status === "OK");
+        if (todosOk) {
+            return {
+                status: "APROVADO",
+                label: `Aprovada no QA (100% OK - ${cenarios.length} cenário${cenarios.length > 1 ? "s" : ""})`,
+                cor: "#16a34a",
+                bg: "#dcfce7",
+                Icon: CheckCircle2
+            };
+        }
+
+        const totalOk = cenarios.filter((c) => c.status === "OK").length;
+        const totalPend = cenarios.filter((c) => c.status === "PENDENTE").length;
+        return {
+            status: "PENDENTE",
+            label: `Pendente / Em Teste (${totalOk} OK, ${totalPend} pendente${totalPend > 1 ? "s" : ""})`,
+            cor: "#2563eb",
+            bg: "#dbeafe",
+            Icon: Clock
+        };
     };
 
     const calcularHorasTrabalhadas = (controleApiId) => {
@@ -215,7 +274,7 @@ export default function Visualizar() {
                                     >
                                         <option value="">-- Todos --</option>
                                         {tecnicosFiltro.map(t => (
-                                            <option key={t.id} value={t.id}>{t.nome}</option>
+                                             <option key={t.id} value={t.id}>{t.nome}</option>
                                         ))}
                                     </select>
                                 </div>
@@ -225,15 +284,15 @@ export default function Visualizar() {
                             <table style={s.table}>
                                 <thead>
                                     <tr>
-                                        {["Tela", "Início", "Término", "Técnico", "Progresso"].map((h, i) => (
-                                            <th key={h} style={{ ...s.th, textAlign: i === 0 ? "left" : "center" }}>{h}</th>
+                                        {["Tela", "Início", "Término", "Técnico", "QA", "Progresso"].map((h, i) => (
+                                            <th key={h} style={{ ...s.th, textAlign: i === 0 ? "left" : "center", width: h === "QA" ? 70 : undefined }}>{h}</th>
                                         ))}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {listaFiltrada.length === 0 && (
                                         <tr>
-                                            <td colSpan={5} style={{ ...s.td, textAlign: "center", color: "#9ca3af", padding: 16 }}>
+                                            <td colSpan={6} style={{ ...s.td, textAlign: "center", color: "#9ca3af", padding: 16 }}>
                                                 Nenhum cronograma cadastrado.
                                             </td>
                                         </tr>
@@ -257,6 +316,8 @@ export default function Visualizar() {
                                         const displayPercent = isFinished ? 100 : percent;
                                         
                                         const hasAlteration = !!item.justificativa;
+                                        const qaStatus = getQaStatus(item);
+                                        const QaIcon = qaStatus.Icon;
 
                                         return (
                                             <tr key={item.id} style={{ background: "#fff" }}>
@@ -285,6 +346,25 @@ export default function Visualizar() {
                                                 </td>
                                                 <td style={{ ...s.td, textAlign: "center", color: "#374151" }}>
                                                     {getNomeTecnico(item.tecnico_id)}
+                                                </td>
+                                                <td style={{ ...s.td, textAlign: "center", width: 70 }}>
+                                                    <div 
+                                                        title={qaStatus.label}
+                                                        style={{
+                                                            display: "inline-flex",
+                                                            alignItems: "center",
+                                                            justifyContent: "center",
+                                                            width: 28,
+                                                            height: 28,
+                                                            borderRadius: 6,
+                                                            background: qaStatus.bg,
+                                                            color: qaStatus.cor,
+                                                            cursor: "help",
+                                                            boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
+                                                        }}
+                                                    >
+                                                        <QaIcon size={18} strokeWidth={2.2} />
+                                                    </div>
                                                 </td>
                                                 <td style={{ ...s.td, textAlign: "center", width: 150 }}>
                                                     <div style={s.progressContainer}>

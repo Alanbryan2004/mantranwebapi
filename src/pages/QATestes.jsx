@@ -480,19 +480,67 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
           <>
             {/* CARDS DE RESUMO */}
             <div style={styles.gridStats}>
-              <div style={{ ...styles.statCard, borderLeft: "4px solid #6b7280" }}>
+              <div
+                onClick={() => setFiltroStatus("TODOS")}
+                title="Clique para ver todas as telas"
+                style={{
+                  ...styles.statCard,
+                  borderLeft: "4px solid #6b7280",
+                  cursor: "pointer",
+                  borderColor: filtroStatus === "TODOS" ? "#6b7280" : "#e5e7eb",
+                  boxShadow: filtroStatus === "TODOS" ? "0 0 0 2px #6b7280" : "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
+                  background: filtroStatus === "TODOS" ? "#f9fafb" : "#fff",
+                  transition: "all 0.15s ease"
+                }}
+              >
                 <div style={styles.statLabel}>Telas Finalizadas</div>
                 <div style={styles.statValue}>{resumo.total}</div>
               </div>
-              <div style={{ ...styles.statCard, borderLeft: "4px solid #16a34a" }}>
+              <div
+                onClick={() => setFiltroStatus("APROVADO")}
+                title="Clique para filtrar apenas Aprovadas"
+                style={{
+                  ...styles.statCard,
+                  borderLeft: "4px solid #16a34a",
+                  cursor: "pointer",
+                  borderColor: filtroStatus === "APROVADO" ? "#16a34a" : "#e5e7eb",
+                  boxShadow: filtroStatus === "APROVADO" ? "0 0 0 2px #16a34a" : "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
+                  background: filtroStatus === "APROVADO" ? "#f0fdf4" : "#fff",
+                  transition: "all 0.15s ease"
+                }}
+              >
                 <div style={styles.statLabel}>Aprovadas (100% OK)</div>
                 <div style={{ ...styles.statValue, color: "#16a34a" }}>{resumo.aprovados}</div>
               </div>
-              <div style={{ ...styles.statCard, borderLeft: "4px solid #dc2626" }}>
+              <div
+                onClick={() => setFiltroStatus("REPROVADO")}
+                title="Clique para filtrar apenas Reprovadas"
+                style={{
+                  ...styles.statCard,
+                  borderLeft: "4px solid #dc2626",
+                  cursor: "pointer",
+                  borderColor: filtroStatus === "REPROVADO" ? "#dc2626" : "#e5e7eb",
+                  boxShadow: filtroStatus === "REPROVADO" ? "0 0 0 2px #dc2626" : "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
+                  background: filtroStatus === "REPROVADO" ? "#fef2f2" : "#fff",
+                  transition: "all 0.15s ease"
+                }}
+              >
                 <div style={styles.statLabel}>Reprovadas (Com Erro)</div>
                 <div style={{ ...styles.statValue, color: "#dc2626" }}>{resumo.reprovados}</div>
               </div>
-              <div style={{ ...styles.statCard, borderLeft: "4px solid #2563eb" }}>
+              <div
+                onClick={() => setFiltroStatus("PENDENTE")}
+                title="Clique para filtrar apenas Em Teste / Pendentes"
+                style={{
+                  ...styles.statCard,
+                  borderLeft: "4px solid #2563eb",
+                  cursor: "pointer",
+                  borderColor: filtroStatus === "PENDENTE" ? "#2563eb" : "#e5e7eb",
+                  boxShadow: filtroStatus === "PENDENTE" ? "0 0 0 2px #2563eb" : "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
+                  background: filtroStatus === "PENDENTE" ? "#eff6ff" : "#fff",
+                  transition: "all 0.15s ease"
+                }}
+              >
                 <div style={styles.statLabel}>Em Teste / Pendentes</div>
                 <div style={{ ...styles.statValue, color: "#2563eb" }}>{resumo.pendentes}</div>
               </div>
@@ -571,6 +619,15 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
                   const totalErro = cenariosDaTela.filter((c) => c.status === "ERRO").length;
                   const totalPendente = cenariosDaTela.filter((c) => c.status === "PENDENTE").length;
 
+                  const qasDaTela = Array.from(
+                    new Set(
+                      cenariosDaTela
+                        .map((c) => c.qa_nome || usuarios.find((u) => u.id === c.qa_id)?.nome)
+                        .filter(Boolean)
+                    )
+                  );
+                  const qaResponsavel = qasDaTela.length > 0 ? qasDaTela.join(", ") : "Não iniciado";
+
                   return (
                     <div key={t.tela} style={styles.screenCard}>
                       {/* CABEÇALHO DO CARD DA TELA */}
@@ -597,6 +654,10 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
                           <div style={styles.screenMeta}>
                             <span>
                               👤 Desenvolvido por: <strong>{t.tecnico}</strong>
+                            </span>
+                            <span>•</span>
+                            <span>
+                              🛡️ QA: <strong>{qaResponsavel}</strong>
                             </span>
                             <span>•</span>
                             <span>
