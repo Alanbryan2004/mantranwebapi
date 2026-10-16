@@ -439,15 +439,29 @@ export default function QATestes() {
         const qaNome = user?.nome || user?.login || "QA";
         const qaId = user?.id || null;
 
-        // Regra de negócio: Apenas dispara notificação para o técnico no PRIMEIRO cenário que acusar erro nesta tela.
-        // Se a tela já possuía outro cenário em ERRO, a notificação já foi enviada no primeiro erro e não deve duplicar.
-        const outrosCenariosComErro = (cenarios || []).filter(
-          (c) => c.tela === nomeTela && c.id !== cenario.id && c.status === "ERRO"
-        );
-        const jaTinhaErroNaTela = outrosCenariosComErro.length > 0;
+        // Regra de negócio: Apenas dispara notificação para o técnico no PRIMEIRO cenário que acusar erro nesta tela nesta rodada.
+        // Consultamos a última notificação desta tela no banco:
+        // Se a última notificação da tela já foi 'qa_reprovado' enviada recentemente (há menos de 10 min),
+        // significa que o técnico já foi avisado nesta sessão de testes e não devemos duplicar.
+        let jaNotificadoNestaRodada = false;
+        try {
+          const ultimasNotifs = await apiGet(
+            `/rest/v1/notificacoes?dados_extras->>tela=eq.${encodeURIComponent(nomeTela)}&order=created_at.desc&limit=1`
+          );
+          const ultimaNotif = ultimasNotifs?.[0];
+          if (ultimaNotif && ultimaNotif.tipo === "qa_reprovado") {
+            const tempoDesdeUltima = Date.now() - new Date(ultimaNotif.created_at).getTime();
+            // Se foi enviada há menos de 10 minutos (mesma sessão contínua de QA na tela), não duplica
+            if (tempoDesdeUltima < 10 * 60 * 1000) {
+              jaNotificadoNestaRodada = true;
+            }
+          }
+        } catch (checkErr) {
+          console.warn("[QA Testes] Erro ao checar última notificação:", checkErr);
+        }
 
-        if (jaTinhaErroNaTela) {
-          console.log(`[QA Testes] Tela "${nomeTela}" já possui outros cenários com erro. Notificação do primeiro erro já disparada.`);
+        if (jaNotificadoNestaRodada) {
+          console.log(`[QA Testes] Tela "${nomeTela}" já possui notificação de reprovação recente. Não duplicando para o técnico.`);
         } else {
           const telaObj = (telas || []).find((t) => t.tela === nomeTela);
 
