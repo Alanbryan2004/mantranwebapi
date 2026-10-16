@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "../components/AppShell";
-import { apiGet, rpc, apiPatch, limparApontamentosAntigos } from "../services/api";
+import { apiGet, rpc, apiPatch, limparApontamentosAntigos, criarNotificacao } from "../services/api";
 import { useAuth } from "../contexts/AuthContext";
 import { getImagensCenario } from "./QATestes";
 import { ChevronLeft, ChevronRight, X, Image as ImageIcon } from "lucide-react";
@@ -302,6 +302,77 @@ export default function MinhasTarefas() {
           observacao_correcao: notaCorrecao.trim(),
           updated_at: new Date().toISOString()
         });
+      }
+
+      // =========================================================================
+      // NOTIFICAÇÃO NO MANTRAN CLIENTES PARA O USUÁRIO QA QUE ESTAVA VALIDANDO
+      // =========================================================================
+      try {
+        const nomeTela = modalQa.tela;
+        const nomeTecnico = user?.nome || user?.login || "Técnico";
+        const idTecnico = user?.id || null;
+
+        // Identifica os usuários QA que apontaram os erros corrigidos
+        let usuariosSistema = null;
+        const qasMap = new Map(); // id -> nome
+
+        for (const cenario of modalQa.cenariosErro || []) {
+          if (cenario.qa_id) {
+            qasMap.set(cenario.qa_id, cenario.qa_nome || "QA");
+          } else if (cenario.qa_nome) {
+            if (!usuariosSistema) {
+              usuariosSistema = await apiGet("/rest/v1/usuario?select=id,nome,login&ativo=eq.true").catch(() => []);
+            }
+            const qaUser = (usuariosSistema || []).find(
+              (u) =>
+                u.nome?.trim().toLowerCase() === cenario.qa_nome?.trim().toLowerCase() ||
+                u.login?.trim().toLowerCase() === cenario.qa_nome?.trim().toLowerCase()
+            );
+            if (qaUser) {
+              qasMap.set(qaUser.id, qaUser.nome || cenario.qa_nome);
+            }
+          }
+        }
+
+        // Enviar notificação para o(s) usuário(s) QA responsável(is)
+        if (qasMap.size > 0) {
+          for (const [qaId, qaNome] of qasMap.entries()) {
+            await criarNotificacao({
+              titulo: `🔁 Tela "${nomeTela}" Pronta para Nova Validação`,
+              mensagem: `O Técnico "${nomeTecnico}" Corrigiu a Tela "${nomeTela}" e já esta disponivel para Nova Validação.`,
+              tipo: "qa_corrigido",
+              destinatario_usuario_id: qaId,
+              dados_extras: {
+                modulo: "qa",
+                acao: "correcao_retorno",
+                tela: nomeTela,
+                tecnico_id: idTecnico,
+                tecnico_nome: nomeTecnico,
+                nota_correcao: notaCorrecao.trim(),
+                qa_id: qaId,
+                qa_nome: qaNome
+              }
+            });
+          }
+        } else {
+          // Fallback: se nenhum QA específico foi localizado, envia notificação geral da tela
+          await criarNotificacao({
+            titulo: `🔁 Tela "${nomeTela}" Pronta para Nova Validação`,
+            mensagem: `O Técnico "${nomeTecnico}" Corrigiu a Tela "${nomeTela}" e já esta disponivel para Nova Validação.`,
+            tipo: "qa_corrigido",
+            destinatario_usuario_id: null,
+            dados_extras: {
+              modulo: "qa",
+              acao: "correcao_retorno",
+              tela: nomeTela,
+              tecnico_id: idTecnico,
+              tecnico_nome: nomeTecnico,
+              nota_correcao: notaCorrecao.trim()
+            }
+          });
+        }
+      } catch (notifErr) {
+        console.warn("Aviso ao enviar notificação de QA corrigido para Mantran Clientes:", notifErr);
       }
 
       setModalQa(null);

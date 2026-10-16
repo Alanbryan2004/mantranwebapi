@@ -45,9 +45,13 @@ export function apiGet(path) {
   return request(path, { method: "GET" });
 }
 
-export function apiPost(path, body) {
+export function apiPost(path, body, extraHeaders = {}) {
   return request(path, {
     method: "POST",
+    headers: {
+      Prefer: "return=representation",
+      ...extraHeaders,
+    },
     body: JSON.stringify(body),
   });
 }
@@ -75,6 +79,34 @@ export function apiDelete(path) {
 
 export function rpc(functionName, payload = {}) {
   return apiPost(`/rest/v1/rpc/${functionName}`, payload);
+}
+
+/* ========================================================
+   NOTIFICAÇÕES COMPARTILHADAS (MANTRAN CLIENTES)
+   ======================================================== */
+export async function criarNotificacao({
+  titulo,
+  mensagem,
+  tipo,
+  destinatario_usuario_id = null,
+  dados_extras = {}
+}) {
+  try {
+    const payload = {
+      titulo,
+      mensagem,
+      tipo: tipo || "sistema",
+      lida: false,
+      dados_extras: {
+        ...dados_extras,
+        destinatario_usuario_id: destinatario_usuario_id || null
+      }
+    };
+    return await apiPost("/rest/v1/notificacoes", payload);
+  } catch (err) {
+    console.error("Erro ao registrar notificação compartilhada:", err);
+    return null;
+  }
 }
 
 /* ========================================================

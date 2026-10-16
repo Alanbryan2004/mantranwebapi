@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "../components/AppShell";
-import { apiGet, apiPost, apiPatch, apiDelete } from "../services/api";
+import { apiGet, apiPost, apiPatch, apiDelete, criarNotificacao } from "../services/api";
 import { useAuth } from "../contexts/AuthContext";
 import {
   CheckCircle2,
@@ -96,6 +96,7 @@ export default function QATestes() {
   const [buscaTela, setBuscaTela] = useState("");
   const [buscaTecnico, setBuscaTecnico] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("TODOS");
+  const [apenasMinhasHomologacoes, setApenasMinhasHomologacoes] = useState(false);
 
   // Tela selecionada / expandida
   const [telaExpandida, setTelaExpandida] = useState(null);
@@ -230,6 +231,25 @@ export default function QATestes() {
     carregar();
   }, []);
 
+  // Default: se o usuário logado é QA de alguma tela, já traz filtrado apenas as dele.
+  // Executa apenas uma vez quando os cenários carregam (não força o filtro se não há nada dele).
+  const [defaultQaAplicado, setDefaultQaAplicado] = useState(false);
+  useEffect(() => {
+    if (defaultQaAplicado) return;
+    if (loading || !user) return;
+    if (!cenarios || cenarios.length === 0) return;
+
+    const nomeUsuario = (user.nome || user.login || "").trim().toLowerCase();
+    const temAlgumaMinha = cenarios.some((c) => {
+      if (c.qa_id && user.id && c.qa_id === user.id) return true;
+      if (c.qa_nome && nomeUsuario && c.qa_nome.trim().toLowerCase() === nomeUsuario) return true;
+      return false;
+    });
+
+    if (temAlgumaMinha) setApenasMinhasHomologacoes(true);
+    setDefaultQaAplicado(true);
+  }, [loading, cenarios, user, defaultQaAplicado]);
+
   // Calcular status consolidado de uma tela baseado nos seus cenários
   function calcularStatusTela(nomeTela) {
     const cenariosDaTela = (cenarios || []).filter((c) => c.tela === nomeTela);
@@ -248,6 +268,19 @@ export default function QATestes() {
     }
 
     return { status: "PENDENTE", label: "Pendente / Em Teste", cor: "#2563eb", bg: "#dbeafe", icon: Clock };
+  }
+
+  // Verifica se o usuário logado é o QA que está homologando a tela
+  // (algum cenário da tela possui o QA informado como o usuário atual)
+  function souOQaDaTela(nomeTela) {
+    if (!user) return false;
+    const cenariosDaTela = (cenarios || []).filter((c) => c.tela === nomeTela);
+    return cenariosDaTela.some((c) => {
+      if (c.qa_id && user.id && c.qa_id === user.id) return true;
+      const nomeUsuario = (user.nome || user.login || "").trim().toLowerCase();
+      if (c.qa_nome && nomeUsuario && c.qa_nome.trim().toLowerCase() === nomeUsuario) return true;
+      return false;
+    });
   }
 
   // Estatísticas gerais
@@ -275,9 +308,10 @@ export default function QATestes() {
       const matchTecnico = buscaTecnico ? t.tecnico.toLowerCase().includes(buscaTecnico.toLowerCase()) : true;
       const { status } = calcularStatusTela(t.tela);
       const matchStatus = filtroStatus === "TODOS" || status === filtroStatus;
-      return matchTela && matchTecnico && matchStatus;
+      const matchQa = apenasMinhasHomologacoes ? souOQaDaTela(t.tela) : true;
+      return matchTela && matchTecnico && matchStatus && matchQa;
     });
-  }, [telas, cenarios, buscaTela, buscaTecnico, filtroStatus]);
+  }, [telas, cenarios, buscaTela, buscaTecnico, filtroStatus, apenasMinhasHomologacoes, user]);
 
   // Ações de Cenário
   function abrirModalNovoCenario(t) {
@@ -395,6 +429,93 @@ export default function QATestes() {
         qa_nome: user?.nome || user?.login || "QA",
         updated_at: new Date().toISOString()
       });
+
+      // =========================================================================
+      // NOTIFICAÇÃO NO MANTRAN CLIENTES PARA O TÉCNICO RESPONSÁVEL DA TELA
+      // =========================================================================
+      try {
+        const cenario = modalErro.cenario;
+        const nomeTela = cenario.tela;
+        const qaNome = user?.nome || user?.login || "QA";
+        const qaId = user?.id || null;
+        const telaObj = (telas || []).find((t) => t.tela === nomeTela);
+
+        // Mapeia técnicos responsáveis por esta tela
+        const tecnicosMap = new Map(); // id -> nome
+
+        // 1. Técnico direto do cenário ou do objeto da tela
+        const tecIdDireto = cenario.tecnico_id || telaObj?.tecnico_id;
+        const tecNomeDireto = cenario.tecnico_nome || telaObj?.tecnico_nome || telaObj?.tecnico;
+        if (tecIdDireto) {
+          tecnicosMap.set(tecIdDireto, tecNomeDireto || "Técnico");
+        }
+
+        // 2. Outros técnicos das tabelas da mesma tela no controle_api
+        if (telaObj?.tabelas) {
+          for (const tab of telaObj.tabelas) {
+            if (tab.tecnico_id) {
+              tecnicosMap.set(tab.tecnico_id, tab.tecnico_nome || tecNomeDireto || "Técnico");
+            }
+          }
+        }
+
+        // 3. Fallback: se não tiver UUID mas tiver o nome, busca na lista de usuários do sistema
+        if (tecnicosMap.size === 0 && tecNomeDireto) {
+          const tecUser = (usuarios || []).find(
+            (u) =>
+              u.nome?.trim().toLowerCase() === tecNomeDireto?.trim().toLowerCase() ||
+              u.login?.trim().toLowerCase() === tecNomeDireto?.trim().toLowerCase()
+          );
+          if (tecUser) {
+            tecnicosMap.set(tecUser.id, tecUser.nome || tecNomeDireto);
+          }
+        }
+
+        // Envia notificação para cada técnico responsável
+        if (tecnicosMap.size > 0) {
+          for (const [tId, tNome] of tecnicosMap.entries()) {
+            await criarNotificacao({
+              titulo: `❌ Tela Reprovada no QA: ${nomeTela}`,
+              mensagem: `A Tela "${nomeTela}" foi reprovada pelo usuário "${qaNome}".`,
+              tipo: "qa_reprovado",
+              destinatario_usuario_id: tId,
+              dados_extras: {
+                modulo: "qa",
+                acao: "reprovacao",
+                tela: nomeTela,
+                cenario_id: cenario.id,
+                cenario_titulo: cenario.titulo,
+                motivo_erro: textoErro.trim(),
+                qa_id: qaId,
+                qa_nome: qaNome,
+                tecnico_id: tId,
+                tecnico_nome: tNome
+              }
+            });
+          }
+        } else {
+          // Sem técnico específico identificado: envia notificação geral da tela
+          await criarNotificacao({
+            titulo: `❌ Tela Reprovada no QA: ${nomeTela}`,
+            mensagem: `A Tela "${nomeTela}" foi reprovada pelo usuário "${qaNome}".`,
+            tipo: "qa_reprovado",
+            destinatario_usuario_id: null,
+            dados_extras: {
+              modulo: "qa",
+              acao: "reprovacao",
+              tela: nomeTela,
+              cenario_id: cenario.id,
+              cenario_titulo: cenario.titulo,
+              motivo_erro: textoErro.trim(),
+              qa_id: qaId,
+              qa_nome: qaNome
+            }
+          });
+        }
+      } catch (notifErr) {
+        console.warn("Aviso ao enviar notificação de QA reprovado para Mantran Clientes:", notifErr);
+      }
+
       setModalErro(null);
       setImagensErro([]);
       await carregar();
@@ -589,12 +710,27 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
                 </select>
               </div>
 
-              {(buscaTela || buscaTecnico || filtroStatus !== "TODOS") && (
+              <button
+                onClick={() => setApenasMinhasHomologacoes((v) => !v)}
+                title="Mostrar apenas as telas em que você é o QA responsável"
+                style={{
+                  ...styles.toggleQaBtn,
+                  background: apenasMinhasHomologacoes ? "#7f1d1d" : "#fff",
+                  color: apenasMinhasHomologacoes ? "#fff" : "#4b5563",
+                  borderColor: apenasMinhasHomologacoes ? "#7f1d1d" : "#d1d5db"
+                }}
+              >
+                <ShieldCheck size={15} />
+                {apenasMinhasHomologacoes ? "Minhas Homologações" : "Todas as Homologações"}
+              </button>
+
+              {(buscaTela || buscaTecnico || filtroStatus !== "TODOS" || apenasMinhasHomologacoes) && (
                 <button
                   onClick={() => {
                     setBuscaTela("");
                     setBuscaTecnico("");
                     setFiltroStatus("TODOS");
+                    setApenasMinhasHomologacoes(false);
                   }}
                   style={styles.clearBtn}
                 >
@@ -1304,6 +1440,18 @@ const styles = {
     fontSize: 12,
     fontWeight: 600,
     cursor: "pointer"
+  },
+  toggleQaBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    border: "1px solid #d1d5db",
+    borderRadius: 8,
+    padding: "7px 14px",
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: "pointer",
+    transition: "all 0.15s ease"
   },
   screenList: {
     display: "flex",
