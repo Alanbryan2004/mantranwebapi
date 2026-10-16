@@ -438,47 +438,86 @@ export default function QATestes() {
         const nomeTela = cenario.tela;
         const qaNome = user?.nome || user?.login || "QA";
         const qaId = user?.id || null;
-        const telaObj = (telas || []).find((t) => t.tela === nomeTela);
 
-        // Mapeia técnicos responsáveis por esta tela
-        const tecnicosMap = new Map(); // id -> nome
+        // Regra de negócio: Apenas dispara notificação para o técnico no PRIMEIRO cenário que acusar erro nesta tela.
+        // Se a tela já possuía outro cenário em ERRO, a notificação já foi enviada no primeiro erro e não deve duplicar.
+        const outrosCenariosComErro = (cenarios || []).filter(
+          (c) => c.tela === nomeTela && c.id !== cenario.id && c.status === "ERRO"
+        );
+        const jaTinhaErroNaTela = outrosCenariosComErro.length > 0;
 
-        // 1. Técnico direto do cenário ou do objeto da tela
-        const tecIdDireto = cenario.tecnico_id || telaObj?.tecnico_id;
-        const tecNomeDireto = cenario.tecnico_nome || telaObj?.tecnico_nome || telaObj?.tecnico;
-        if (tecIdDireto) {
-          tecnicosMap.set(tecIdDireto, tecNomeDireto || "Técnico");
-        }
+        if (jaTinhaErroNaTela) {
+          console.log(`[QA Testes] Tela "${nomeTela}" já possui outros cenários com erro. Notificação do primeiro erro já disparada.`);
+        } else {
+          const telaObj = (telas || []).find((t) => t.tela === nomeTela);
 
-        // 2. Outros técnicos das tabelas da mesma tela no controle_api
-        if (telaObj?.tabelas) {
-          for (const tab of telaObj.tabelas) {
-            if (tab.tecnico_id) {
-              tecnicosMap.set(tab.tecnico_id, tab.tecnico_nome || tecNomeDireto || "Técnico");
+          // Mapeia técnicos responsáveis por esta tela
+          const tecnicosMap = new Map(); // id -> nome
+
+          // 1. Técnico direto do cenário ou do objeto da tela
+          const tecIdDireto = cenario.tecnico_id || telaObj?.tecnico_id;
+          const tecNomeDireto = cenario.tecnico_nome || telaObj?.tecnico_nome || telaObj?.tecnico;
+          if (tecIdDireto) {
+            tecnicosMap.set(tecIdDireto, tecNomeDireto || "Técnico");
+          }
+
+          // 2. Outros técnicos das tabelas da mesma tela no controle_api
+          if (telaObj?.tabelas) {
+            for (const tab of telaObj.tabelas) {
+              if (tab.tecnico_id) {
+                tecnicosMap.set(tab.tecnico_id, tab.tecnico_nome || tecNomeDireto || "Técnico");
+              }
             }
           }
-        }
 
-        // 3. Fallback: se não tiver UUID mas tiver o nome, busca na lista de usuários do sistema
-        if (tecnicosMap.size === 0 && tecNomeDireto) {
-          const tecUser = (usuarios || []).find(
-            (u) =>
-              u.nome?.trim().toLowerCase() === tecNomeDireto?.trim().toLowerCase() ||
-              u.login?.trim().toLowerCase() === tecNomeDireto?.trim().toLowerCase()
-          );
-          if (tecUser) {
-            tecnicosMap.set(tecUser.id, tecUser.nome || tecNomeDireto);
+          // 3. Fallback: se não tiver UUID mas tiver o nome, busca na lista de usuários do sistema
+          if (tecnicosMap.size === 0 && tecNomeDireto) {
+            const cleanNome = tecNomeDireto.trim().toLowerCase();
+            const tecUser = (usuarios || []).find((u) => {
+              const uNome = (u.nome || "").trim().toLowerCase();
+              const uLogin = (u.login || "").trim().toLowerCase();
+              return (
+                uNome === cleanNome ||
+                uLogin === cleanNome ||
+                uNome.startsWith(cleanNome) ||
+                cleanNome.startsWith(uNome) ||
+                uNome.includes(cleanNome)
+              );
+            });
+            if (tecUser) {
+              tecnicosMap.set(tecUser.id, tecUser.nome || tecNomeDireto);
+            }
           }
-        }
 
-        // Envia notificação para cada técnico responsável
-        if (tecnicosMap.size > 0) {
-          for (const [tId, tNome] of tecnicosMap.entries()) {
+          // Envia notificação para cada técnico responsável
+          if (tecnicosMap.size > 0) {
+            for (const [tId, tNome] of tecnicosMap.entries()) {
+              await criarNotificacao({
+                titulo: `❌ Tela Reprovada no QA: ${nomeTela}`,
+                mensagem: `A Tela "${nomeTela}" foi reprovada pelo usuário "${qaNome}".`,
+                tipo: "qa_reprovado",
+                destinatario_usuario_id: tId,
+                dados_extras: {
+                  modulo: "qa",
+                  acao: "reprovacao",
+                  tela: nomeTela,
+                  cenario_id: cenario.id,
+                  cenario_titulo: cenario.titulo,
+                  motivo_erro: textoErro.trim(),
+                  qa_id: qaId,
+                  qa_nome: qaNome,
+                  tecnico_id: tId,
+                  tecnico_nome: tNome
+                }
+              });
+            }
+          } else {
+            // Sem técnico específico identificado: envia notificação geral da tela
             await criarNotificacao({
               titulo: `❌ Tela Reprovada no QA: ${nomeTela}`,
               mensagem: `A Tela "${nomeTela}" foi reprovada pelo usuário "${qaNome}".`,
               tipo: "qa_reprovado",
-              destinatario_usuario_id: tId,
+              destinatario_usuario_id: null,
               dados_extras: {
                 modulo: "qa",
                 acao: "reprovacao",
@@ -487,30 +526,10 @@ export default function QATestes() {
                 cenario_titulo: cenario.titulo,
                 motivo_erro: textoErro.trim(),
                 qa_id: qaId,
-                qa_nome: qaNome,
-                tecnico_id: tId,
-                tecnico_nome: tNome
+                qa_nome: qaNome
               }
             });
           }
-        } else {
-          // Sem técnico específico identificado: envia notificação geral da tela
-          await criarNotificacao({
-            titulo: `❌ Tela Reprovada no QA: ${nomeTela}`,
-            mensagem: `A Tela "${nomeTela}" foi reprovada pelo usuário "${qaNome}".`,
-            tipo: "qa_reprovado",
-            destinatario_usuario_id: null,
-            dados_extras: {
-              modulo: "qa",
-              acao: "reprovacao",
-              tela: nomeTela,
-              cenario_id: cenario.id,
-              cenario_titulo: cenario.titulo,
-              motivo_erro: textoErro.trim(),
-              qa_id: qaId,
-              qa_nome: qaNome
-            }
-          });
         }
       } catch (notifErr) {
         console.warn("Aviso ao enviar notificação de QA reprovado para Mantran Clientes:", notifErr);
