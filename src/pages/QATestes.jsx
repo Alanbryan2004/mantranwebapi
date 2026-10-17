@@ -25,7 +25,8 @@ import {
   Camera,
   Image as ImageIcon,
   Maximize2,
-  X
+  X,
+  Code2
 } from "lucide-react";
 
 // Função para processar e comprimir imagem do print
@@ -97,6 +98,7 @@ export default function QATestes() {
   const [buscaTecnico, setBuscaTecnico] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("TODOS");
   const [apenasMinhasHomologacoes, setApenasMinhasHomologacoes] = useState(false);
+  const [apenasMinhasTelasTecnico, setApenasMinhasTelasTecnico] = useState(false);
 
   // Tela selecionada / expandida
   const [telaExpandida, setTelaExpandida] = useState(null);
@@ -199,12 +201,14 @@ export default function QATestes() {
             tecnico_id: t.tecnico_id,
             tecnico_nome: t.tecnico_nome,
             tecnicos: new Set(),
+            tecnicos_ids: new Set(),
             endpoints: new Set()
           };
         }
 
         mapaTelas[nomeTela].tabelas.push(t);
         if (t.tecnico_nome) mapaTelas[nomeTela].tecnicos.add(t.tecnico_nome);
+        if (t.tecnico_id) mapaTelas[nomeTela].tecnicos_ids.add(t.tecnico_id);
         if (t.tecnico_id && !mapaTelas[nomeTela].tecnico_id) mapaTelas[nomeTela].tecnico_id = t.tecnico_id;
         if (t.tecnico_nome && !mapaTelas[nomeTela].tecnico_nome) mapaTelas[nomeTela].tecnico_nome = t.tecnico_nome;
 
@@ -216,6 +220,7 @@ export default function QATestes() {
       const listaAgrupada = Object.values(mapaTelas).map((item) => ({
         ...item,
         tecnico: Array.from(item.tecnicos).join(", ") || item.tecnico_nome || "Sem Técnico",
+        tecnicos_ids: Array.from(item.tecnicos_ids),
         endpoints: Array.from(item.endpoints)
       }));
 
@@ -232,23 +237,35 @@ export default function QATestes() {
   }, []);
 
   // Default: se o usuário logado é QA de alguma tela, já traz filtrado apenas as dele.
-  // Executa apenas uma vez quando os cenários carregam (não força o filtro se não há nada dele).
-  const [defaultQaAplicado, setDefaultQaAplicado] = useState(false);
+  // Default: se o usuário logado for Técnico e tiver telas dele, já traz filtrado apenas as dele.
+  // Se for QA e tiver homologações dele, traz filtrado apenas as dele.
+  const [defaultFiltroAplicado, setDefaultFiltroAplicado] = useState(false);
   useEffect(() => {
-    if (defaultQaAplicado) return;
+    if (defaultFiltroAplicado) return;
     if (loading || !user) return;
-    if (!cenarios || cenarios.length === 0) return;
+    if (telas.length === 0) return;
 
-    const nomeUsuario = (user.nome || user.login || "").trim().toLowerCase();
-    const temAlgumaMinha = cenarios.some((c) => {
-      if (c.qa_id && user.id && c.qa_id === user.id) return true;
-      if (c.qa_nome && nomeUsuario && c.qa_nome.trim().toLowerCase() === nomeUsuario) return true;
-      return false;
-    });
+    const isPerfilTecnico = (user.perfil || "").toLowerCase().includes("tecnico");
 
-    if (temAlgumaMinha) setApenasMinhasHomologacoes(true);
-    setDefaultQaAplicado(true);
-  }, [loading, cenarios, user, defaultQaAplicado]);
+    if (isPerfilTecnico) {
+      const temTelasMinhas = telas.some((t) => souOTecnicoDaTela(t));
+      if (temTelasMinhas) {
+        setApenasMinhasTelasTecnico(true);
+      }
+    } else {
+      const nomeUsuario = (user.nome || user.login || "").trim().toLowerCase();
+      const temHomologacaoMinha = (cenarios || []).some((c) => {
+        if (c.qa_id && user.id && c.qa_id === user.id) return true;
+        if (c.qa_nome && nomeUsuario && c.qa_nome.trim().toLowerCase() === nomeUsuario) return true;
+        return false;
+      });
+      if (temHomologacaoMinha) {
+        setApenasMinhasHomologacoes(true);
+      }
+    }
+
+    setDefaultFiltroAplicado(true);
+  }, [loading, telas, cenarios, user, defaultFiltroAplicado]);
 
   // Calcular status consolidado de uma tela baseado nos seus cenários
   function calcularStatusTela(nomeTela) {
@@ -268,6 +285,29 @@ export default function QATestes() {
     }
 
     return { status: "PENDENTE", label: "Pendente / Em Teste", cor: "#2563eb", bg: "#dbeafe", icon: Clock };
+  }
+
+  // Verifica se o usuário logado é o técnico responsável pela tela (ou por alguma tabela da tela)
+  function souOTecnicoDaTela(telaObj) {
+    if (!user) return false;
+    const userId = user.id;
+    const userNome = (user.nome || user.login || "").trim().toLowerCase();
+
+    // 1. Verificação por ID
+    if (userId) {
+      if (telaObj.tecnico_id === userId) return true;
+      if (Array.isArray(telaObj.tecnicos_ids) && telaObj.tecnicos_ids.includes(userId)) return true;
+      if (Array.isArray(telaObj.tabelas) && telaObj.tabelas.some((tb) => tb.tecnico_id === userId)) return true;
+    }
+
+    // 2. Verificação por Nome
+    if (userNome) {
+      if (telaObj.tecnico_nome && telaObj.tecnico_nome.trim().toLowerCase() === userNome) return true;
+      if (telaObj.tecnico && telaObj.tecnico.toLowerCase().includes(userNome)) return true;
+      if (Array.isArray(telaObj.tabelas) && telaObj.tabelas.some((tb) => tb.tecnico_nome && tb.tecnico_nome.trim().toLowerCase() === userNome)) return true;
+    }
+
+    return false;
   }
 
   // Verifica se o usuário logado é o QA que está homologando a tela
@@ -309,9 +349,10 @@ export default function QATestes() {
       const { status } = calcularStatusTela(t.tela);
       const matchStatus = filtroStatus === "TODOS" || status === filtroStatus;
       const matchQa = apenasMinhasHomologacoes ? souOQaDaTela(t.tela) : true;
-      return matchTela && matchTecnico && matchStatus && matchQa;
+      const matchMeuTecnico = apenasMinhasTelasTecnico ? souOTecnicoDaTela(t) : true;
+      return matchTela && matchTecnico && matchStatus && matchQa && matchMeuTecnico;
     });
-  }, [telas, cenarios, buscaTela, buscaTecnico, filtroStatus, apenasMinhasHomologacoes, user]);
+  }, [telas, cenarios, buscaTela, buscaTecnico, filtroStatus, apenasMinhasHomologacoes, apenasMinhasTelasTecnico, user]);
 
   // Ações de Cenário
   function abrirModalNovoCenario(t) {
@@ -743,27 +784,56 @@ GRANT ALL ON TABLE public.qa_cenarios TO service_role;`;
                 </select>
               </div>
 
+              {/* Botão de filtro: Apenas Minhas Telas (Técnico) */}
               <button
-                onClick={() => setApenasMinhasHomologacoes((v) => !v)}
-                title="Mostrar apenas as telas em que você é o QA responsável"
+                onClick={() => {
+                  setApenasMinhasTelasTecnico((v) => {
+                    const proximo = !v;
+                    if (proximo) setApenasMinhasHomologacoes(false);
+                    return proximo;
+                  });
+                }}
+                title={apenasMinhasTelasTecnico ? "Exibindo apenas telas onde você é o técnico (clique para ver todas)" : "Mostrar apenas as telas em que você é o técnico responsável"}
                 style={{
                   ...styles.toggleQaBtn,
-                  background: apenasMinhasHomologacoes ? "#7f1d1d" : "#fff",
-                  color: apenasMinhasHomologacoes ? "#fff" : "#4b5563",
-                  borderColor: apenasMinhasHomologacoes ? "#7f1d1d" : "#d1d5db"
+                  background: apenasMinhasTelasTecnico ? "#2563eb" : "#fff",
+                  color: apenasMinhasTelasTecnico ? "#fff" : "#475569",
+                  borderColor: apenasMinhasTelasTecnico ? "#2563eb" : "#cbd5e1"
+                }}
+              >
+                <Code2 size={15} />
+                {apenasMinhasTelasTecnico ? "Minhas Telas (Técnico)" : "Todas as Telas (Técnico)"}
+              </button>
+
+              {/* Botão de filtro: Apenas Minhas Homologações (QA) */}
+              <button
+                onClick={() => {
+                  setApenasMinhasHomologacoes((v) => {
+                    const proximo = !v;
+                    if (proximo) setApenasMinhasTelasTecnico(false);
+                    return proximo;
+                  });
+                }}
+                title={apenasMinhasHomologacoes ? "Exibindo apenas telas onde você é o QA (clique para ver todas)" : "Mostrar apenas as telas em que você é o QA responsável"}
+                style={{
+                  ...styles.toggleQaBtn,
+                  background: apenasMinhasHomologacoes ? "#dc2626" : "#fff",
+                  color: apenasMinhasHomologacoes ? "#fff" : "#475569",
+                  borderColor: apenasMinhasHomologacoes ? "#dc2626" : "#cbd5e1"
                 }}
               >
                 <ShieldCheck size={15} />
                 {apenasMinhasHomologacoes ? "Minhas Homologações" : "Todas as Homologações"}
               </button>
 
-              {(buscaTela || buscaTecnico || filtroStatus !== "TODOS" || apenasMinhasHomologacoes) && (
+              {(buscaTela || buscaTecnico || filtroStatus !== "TODOS" || apenasMinhasHomologacoes || apenasMinhasTelasTecnico) && (
                 <button
                   onClick={() => {
                     setBuscaTela("");
                     setBuscaTecnico("");
                     setFiltroStatus("TODOS");
                     setApenasMinhasHomologacoes(false);
+                    setApenasMinhasTelasTecnico(false);
                   }}
                   style={styles.clearBtn}
                 >

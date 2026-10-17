@@ -197,8 +197,24 @@ export default function Dashboard() {
   }, [usuariosAtivos]);
 
   const activeUserNames = useMemo(() => {
-    return new Set(usuariosAtivos.map((u) => (u.nome || "").trim().toLowerCase()));
+    const s = new Set(usuariosAtivos.map((u) => (u.nome || "").trim().toLowerCase()));
+    if (s.has("gabriel onório") || s.has("gabriel onorio")) {
+      s.add("gabriel");
+    }
+    if (s.has("guilherme docha")) {
+      s.add("guilherme");
+    }
+    return s;
   }, [usuariosAtivos]);
+
+  const obterNomeTecnico = (tecnicoId, tecnicoNome) => {
+    const userObj = usuariosAtivos.find((u) => u.id === tecnicoId);
+    let nome = userObj?.nome || tecnicoNome || "Sem Técnico";
+    const nomeLimpo = nome.trim().toLowerCase();
+    if (nomeLimpo === "gabriel") return "Gabriel Onório";
+    if (nomeLimpo === "guilherme") return "Guilherme Docha";
+    return nome;
+  };
 
   const isUserAtivo = (id, nome) => {
     if (!usuariosAtivos || usuariosAtivos.length === 0) return true;
@@ -243,7 +259,7 @@ export default function Dashboard() {
           continue;
         }
 
-        const key = r.tecnico_nome || "Sem Técnico";
+        const key = obterNomeTecnico(r.tecnico_id, r.tecnico_nome);
         porTecnico[key] ||= {
           total: 0,
           pendentes: 0,
@@ -253,7 +269,9 @@ export default function Dashboard() {
         };
 
         porTecnico[key].total++;
-        porTecnico[key].horasTotais = horasPorTecnico[r.tecnico_id] || 0;
+        if (r.tecnico_id && horasPorTecnico[r.tecnico_id]) {
+          porTecnico[key].horasTotais = horasPorTecnico[r.tecnico_id];
+        }
 
         if (r.status_api === "Pendente") porTecnico[key].pendentes++;
         if (idsEmAndamento.includes(r.id)) {
@@ -280,6 +298,7 @@ export default function Dashboard() {
     return produtividadeTelas
       .filter((t) => isUserAtivo(t.tecnico_id, t.tecnico_nome))
       .map((t) => {
+        const nomeTecnico = obterNomeTecnico(t.tecnico_id, t.tecnico_nome);
         const finalizadas = t.telas_finalizadas || 0;
         const metaTech = t.meta_semanal || 1;
         const faltam = Math.max(metaTech - finalizadas, 0);
@@ -292,6 +311,7 @@ export default function Dashboard() {
 
         return {
           ...t,
+          tecnico_nome: nomeTecnico,
           finalizadas,
           faltam,
           percentual,
@@ -340,7 +360,7 @@ export default function Dashboard() {
     for (const t of historicoTelas) {
       if (t.tecnico_id && isUserAtivo(t.tecnico_id, t.tecnico_nome)) {
         tecnicosSet.add(t.tecnico_id);
-        tecnicosInfo[t.tecnico_id] = t.tecnico_nome || "Sem Nome";
+        tecnicosInfo[t.tecnico_id] = obterNomeTecnico(t.tecnico_id, t.tecnico_nome);
       }
     }
 
@@ -648,7 +668,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                       {expandedTech[nome] && (() => {
-                        const techTasks = rows.filter(r => r.tecnico_nome === nome);
+                        const techTasks = rows.filter(r => obterNomeTecnico(r.tecnico_id, r.tecnico_nome) === nome);
                         const workingTasks = techTasks.filter(r => idsEmAndamento.includes(r.id));
                         const pausedTasks = techTasks.filter(r => 
                           !idsEmAndamento.includes(r.id) && 
